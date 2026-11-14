@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bible — Overlay</title>
+  <style>
+    :root {
+      --accent: #b08d4f;
+      --bg1: rgba(6, 14, 38, 0.88);
+      --bg2: rgba(4, 9, 26, 0.92);
+      --text-size: 42px;
+      --ref-size: 22px;
+    }
+    html, body { width:100%; height:100%; margin:0; overflow:hidden; background:transparent;
+      font-family:"Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+
+    .stage { position:absolute; inset:0; display:flex; padding:0; box-sizing:border-box; }
+    .stage[data-pos="bottom"] { align-items:flex-end;  justify-content:center; }
+    .stage[data-pos="center"] { align-items:center;    justify-content:center; }
+    .stage[data-pos="top"]    { align-items:flex-start; justify-content:center; }
+
+    /* bandeau PLEINE LARGEUR, collé au bord */
+    .band {
+      position:relative; box-sizing:border-box; width:100%;
+      display:flex; flex-direction:column; align-items:center; gap:10px;
+      padding:30px 6vw 34px;
+      background:none; border-radius:0; box-shadow:none; color:#fff;
+      opacity:0; transform:translateY(22px);
+      transition:opacity .45s ease, transform .45s cubic-bezier(.16,.84,.2,1);
+    }
+    /* couche de FOND séparée : fondu doux sans toucher au texte */
+    .band::after {
+      content:""; position:absolute; inset:0; z-index:0; pointer-events:none;
+      background:linear-gradient(180deg, var(--bg1), var(--bg2));
+    }
+    .ref, .verse { position:relative; z-index:1; width:100%; max-width:min(1500px, 86vw); text-align:center; }
+    .band::before { content:""; position:absolute; top:0; left:28%; right:28%; height:3px; z-index:1;
+      background:linear-gradient(90deg, transparent, var(--accent), transparent); }
+
+    .stage[data-bg="band"] .band::after { box-shadow:0 -12px 34px rgba(0,0,0,.30); }
+
+    .stage[data-bg="none"] .band { padding:16px 6vw; }
+    .stage[data-bg="none"] .band::after,
+    .stage[data-bg="none"] .band::before { display:none; }
+
+    /* dégradé transparent — fondu progressif par masque */
+    .stage[data-bg="gradient"] .band { padding:190px 6vw 56px; }
+    .stage[data-bg="gradient"] .band::before { display:none; }
+    .stage[data-bg="gradient"][data-pos="bottom"] .band::after {
+      -webkit-mask-image:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.04) 20%, rgba(0,0,0,.14) 34%, rgba(0,0,0,.34) 47%, rgba(0,0,0,.60) 59%, rgba(0,0,0,.82) 70%, rgba(0,0,0,.95) 80%, #000 90%);
+              mask-image:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.04) 20%, rgba(0,0,0,.14) 34%, rgba(0,0,0,.34) 47%, rgba(0,0,0,.60) 59%, rgba(0,0,0,.82) 70%, rgba(0,0,0,.95) 80%, #000 90%);
+    }
+    .stage[data-bg="gradient"][data-pos="top"] .band { padding:56px 6vw 190px; }
+    .stage[data-bg="gradient"][data-pos="top"] .band::after {
+      -webkit-mask-image:linear-gradient(to top, rgba(0,0,0,0) 0%, rgba(0,0,0,.04) 20%, rgba(0,0,0,.14) 34%, rgba(0,0,0,.34) 47%, rgba(0,0,0,.60) 59%, rgba(0,0,0,.82) 70%, rgba(0,0,0,.95) 80%, #000 90%);
+              mask-image:linear-gradient(to top, rgba(0,0,0,0) 0%, rgba(0,0,0,.04) 20%, rgba(0,0,0,.14) 34%, rgba(0,0,0,.34) 47%, rgba(0,0,0,.60) 59%, rgba(0,0,0,.82) 70%, rgba(0,0,0,.95) 80%, #000 90%);
+    }
+    .stage[data-bg="gradient"][data-pos="center"] .band { padding:140px 6vw 140px; }
+    .stage[data-bg="gradient"][data-pos="center"] .band::after {
+      -webkit-mask-image:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.5) 18%, #000 34%, #000 66%, rgba(0,0,0,.5) 82%, rgba(0,0,0,0) 100%);
+              mask-image:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.5) 18%, #000 34%, #000 66%, rgba(0,0,0,.5) 82%, rgba(0,0,0,0) 100%);
+    }
+
+    .stage.is-visible .band { opacity:1; transform:translateY(0); }
+    .stage.is-hiding  .band { opacity:0; transform:translateY(16px); transition:opacity .35s ease, transform .35s ease; }
+
+    .ref {
+      font-size:var(--ref-size); letter-spacing:.2em; text-transform:uppercase;
+      color:var(--accent); font-weight:700;
+    }
+    .ref:empty, .stage.no-ref .ref { display:none; }
+    .stage.ref-below .ref { order:2; }
+
+    .verse {
+      font-size:var(--text-size); font-weight:600; line-height:1.34;
+      text-shadow:0 3px 14px rgba(0,0,0,.6), 0 1px 3px rgba(0,0,0,.8);
+    }
+    .verse:empty { display:none; }
+
+    .band.in .ref, .band.in .verse { animation:riseIn .4s cubic-bezier(.18,.9,.22,1) both; }
+    .band.in .verse { animation-delay:.06s; }
+    @keyframes riseIn { 0% { opacity:0; transform:translateY(12px); } 100% { opacity:1; transform:translateY(0); } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .band { transition:none !important; }
+      .band.in .ref, .band.in .verse { animation:none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage" data-pos="bottom" data-bg="gradient">
+    <div class="band" id="band">
+      <div class="ref" id="ref"></div>
+      <div class="verse" id="verse"></div>
+    </div>
+  </div>
+
+  <script>
+    // URL STATIQUE : dans OBS -> file:///…/bible-overlay.html
+    const CHANNEL = 'bible';
+    const STATE_KEY = 'bible-state';
+    const root = document.documentElement;
+    const stage = document.getElementById('stage');
+    const band = document.getElementById('band');
+    const refEl = document.getElementById('ref');
+    const verseEl = document.getElementById('verse');
+
+    const VARS = { accent:'--accent', bg1:'--bg1', bg2:'--bg2', textSize:'--text-size', refSize:'--ref-size' };
+    let lastText = '';
+
+    const applyConfig = (c) => {
+      if (!c) return;
+      for (const [k, v] of Object.entries(VARS)) if (c[k] != null && c[k] !== '') root.style.setProperty(v, c[k]);
+      if (c.position) stage.setAttribute('data-pos', c.position);
+      stage.setAttribute('data-bg', c.bg || 'gradient');
+      stage.classList.toggle('no-ref', c.showRef === false);
+      stage.classList.toggle('ref-below', c.refBelow === true);
+
+      const t = (c.ref || '') + '\u0001' + (c.text || '');
+      if (t !== lastText) {
+        lastText = t;
+        refEl.textContent = c.ref || '';
+        // typographie française : espace insécable avant ; : ! ? » et après « (évite une ligne qui commence par « ; »)
+        verseEl.textContent = (c.text || '').replace(/ ([;:!?»])/g, ' $1').replace(/(«) /g, '$1 ');
+        band.classList.remove('in'); void band.offsetWidth; band.classList.add('in');
+      }
+      fitVerse();
+    };
+    // verset ENTIER : s'il est long, la police se réduit pour que tout tienne (jamais coupé) ; un verset court garde la taille choisie
+    const fitVerse = () => {
+      const base = parseFloat(getComputedStyle(root).getPropertyValue('--text-size')) || 42;
+      let s = base, g = 0; verseEl.style.fontSize = s + 'px';
+      const maxH = window.innerHeight * 0.42;
+      while (verseEl.offsetHeight > maxH && s > 24 && g < 60) { s -= 2; verseEl.style.fontSize = s + 'px'; g++; }
+    };
+    window.addEventListener('resize', () => fitVerse());
+
+    function show() { stage.classList.remove('is-hiding','is-visible'); void stage.offsetWidth; stage.classList.add('is-visible'); }
+    function hide() { stage.classList.remove('is-visible'); stage.classList.add('is-hiding'); }
+
+    let lastSeq = null;
+    const applyState = (s) => {
+      if (!s) return;
+      applyConfig(s.config);
+      if (s.seq !== lastSeq) {
+        lastSeq = s.seq;
+        if (s.action === 'show' || (s.action == null && s.visible)) show();
+        else if (s.action === 'hide') hide();
+      }
+    };
+    const readState = () => { try { return JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch (e) { return null; } };
+
+    const params = new URLSearchParams(location.search);
+    const forceShow = params.get('preview') === '1';
+    const init = readState();
+    if (init) { applyConfig(init.config); lastSeq = init.seq; if (forceShow || init.visible) setTimeout(show, 40); }
+    else if (forceShow) setTimeout(show, 40);
+
+    if ('BroadcastChannel' in window) { const ch = new BroadcastChannel(CHANNEL); ch.onmessage = (e) => applyState(e.data); }
+    window.addEventListener('storage', (e) => { if (e.key === STATE_KEY) applyState(readState()); });
+    setInterval(() => applyState(readState()), 300);
+
+    // ---- Pile d'overlays : n'occupe le bas que si positionné en bas ----
+    if (window.OverlayStack && !forceShow) {
+      OverlayStack.registerPublisher('bible', () => {
+        if (!stage.classList.contains('is-visible')) return 0;
+        if (stage.getAttribute('data-pos') !== 'bottom') return 0;
+        const top = Math.min(refEl.getBoundingClientRect().top, verseEl.getBoundingClientRect().top);
+        return Math.max(0, (window.innerHeight - top) / window.innerHeight);
+      }, 500);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bible — Régie</title>
+  <link rel="stylesheet" href="dock-ui.css">
+  <style>
+    .preview-frame { position:relative; overflow:hidden; }
+    #preview { position:absolute; top:0; left:0; width:1920px; height:1080px; transform-origin:top left; border:0; }
+    .chk { display:flex; align-items:center; gap:9px; font-size:13.5px; color:hsl(var(--foreground)); cursor:pointer; padding:4px 0; }
+    .chk input { width:18px; height:18px; accent-color:hsl(var(--brand)); }
+    .now { border:1px solid hsl(var(--border)); border-radius:calc(var(--radius) - .2rem); padding:12px 14px; background:hsl(var(--muted)); }
+    .now .nr { font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:hsl(var(--brand)); font-weight:700; margin-bottom:4px; }
+    .now .nt { font-size:14px; line-height:1.45; }
+    .now .nt.empty { color:hsl(var(--muted-foreground)); font-style:italic; }
+    .list { display:grid; gap:3px; max-height:300px; overflow-y:auto; padding:2px; }
+    /* ligne de verset : classe « vrs » (et non « row », qui est la classe de mise en page de dock-ui.css :
+       le style des versets s'appliquait aussi au champ Référence et le réduisait à 30 px) */
+    .vrs { display:grid; grid-template-columns:30px 1fr; gap:9px; align-items:start; text-align:left;
+      padding:7px 9px; border:1px solid transparent; border-radius:calc(var(--radius) - .25rem);
+      background:transparent; color:inherit; font:inherit; cursor:pointer; width:100%; touch-action:manipulation; }
+    .vrs:hover { background:hsl(var(--accent)); }
+    .vrs .i { color:hsl(var(--muted-foreground)); font-size:11.5px; font-variant-numeric:tabular-nums; text-align:right; }
+    .vrs .t { font-size:12.5px; line-height:1.35; }
+    .vrs .r { font-weight:650; font-size:12.5px; color:hsl(var(--brand)); }
+    .vrs.cur { background:hsl(var(--brand)/.14); border-color:hsl(var(--brand)/.4); }
+    .vrs.cur .i { color:hsl(var(--brand)); font-weight:700; }
+    .vrs.empty { opacity:.5; } .vrs.empty .t { font-style:italic; }
+    /* sélecteur de version (LSG / Malagasy / KJV…) */
+    .ver-chips { display:flex; flex-wrap:wrap; gap:7px; }
+    .chip { display:inline-flex; align-items:center; gap:6px; padding:7px 13px; border-radius:999px;
+      border:1px solid hsl(var(--border)); background:hsl(var(--card)); color:hsl(var(--foreground));
+      font-size:12.5px; font-weight:650; cursor:pointer; white-space:nowrap; font-family:inherit; touch-action:manipulation; }
+    .chip:hover { border-color:hsl(var(--brand)/.5); background:hsl(var(--accent)); }
+    .chip.active { background:hsl(var(--brand)); border-color:hsl(var(--brand)); color:#1a1206; font-weight:700; }
+    .grid-bcv { display:grid; grid-template-columns:1.6fr 1fr 1fr; gap:8px; }
+    .hidden { display:none !important; }
+    /* ---- recherche dans le texte : champ + résultats avec le passage trouvé surligné ---- */
+    .search-wrap { position:relative; }
+    .search-wrap .input { padding-right:34px; }
+    .clearBtn { position:absolute; right:6px; top:50%; transform:translateY(-50%); width:24px; height:24px; border-radius:50%; border:0;
+      background:hsl(var(--muted)); color:hsl(var(--muted-foreground)); cursor:pointer; font-size:12px; line-height:1;
+      display:flex; align-items:center; justify-content:center; padding:0; }
+    .clearBtn:hover { background:hsl(var(--accent)); color:hsl(var(--foreground)); }
+    .sres-list { display:grid; gap:4px; max-height:300px; overflow-y:auto; padding:2px; }
+    .sres { display:grid; gap:3px; text-align:left; padding:9px 11px; border:1px solid hsl(var(--border)); border-radius:calc(var(--radius) - .2rem);
+      background:hsl(var(--card)); color:inherit; font:inherit; cursor:pointer; width:100%; touch-action:manipulation; }
+    .sres:hover { border-color:hsl(var(--brand)/.5); background:hsl(var(--accent)); }
+    .sres.hl { box-shadow:0 0 0 2px hsl(var(--brand)/.35); }
+    .sres.cur { background:hsl(var(--brand)/.14); border-color:hsl(var(--brand)/.55); }
+    .sres.more { text-align:center; border-style:dashed; color:hsl(var(--brand)); font-weight:650; }
+    .sres .r { font-weight:700; font-size:12.5px; color:hsl(var(--brand)); }
+    .sres .t { font-size:12.5px; line-height:1.45; }
+    .sres mark { background:hsl(var(--brand)/.38); color:inherit; border-radius:3px; padding:0 2px; }
+    .sres-note { font-size:11.5px; color:hsl(var(--muted-foreground)); padding:6px 4px 2px; }
+
+    .mobile-tabs { display:none; }
+    @media (max-width:880px) {
+      body { padding:0; }
+      .mobile-app { display:flex; flex-direction:column; height:100dvh; }
+      .page-header { padding:10px 14px; margin:0; gap:8px; border-bottom:1px solid hsl(var(--border)); }
+      .page-header h1 { font-size:16px; } .page-header .desc { display:none; }
+      .app-grid { flex:1; min-height:0; display:block; position:relative; gap:0; }
+      .app-grid > .col { display:contents; }
+      .panel { position:absolute; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:12px; display:none; }
+      .panel.active { display:block; }
+      .card { box-shadow:none; border-radius:12px; }
+      /* Direct : le panneau défile normalement. (L'ancien « tout tenir dans l'écran » écrasait
+         la liste des versets à ~40 px de haut.) */
+      .list { max-height:min(46vh, 420px); }
+      .sres-list { max-height:min(38vh, 340px); }
+      .mobile-tabs { display:grid; grid-template-columns:repeat(4,1fr); background:hsl(var(--card)); border-top:1px solid hsl(var(--border)); padding-bottom:env(safe-area-inset-bottom,0); }
+      .mobile-tabs button { display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 4px; background:none; border:0; cursor:pointer; color:hsl(var(--muted-foreground)); font:inherit; font-size:17px; line-height:1; }
+      .mobile-tabs button span { font-size:10.5px; font-weight:500; }
+      .mobile-tabs button.active { color:hsl(var(--brand)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container mobile-app">
+    <div class="page-header">
+      <h1>📖 Bible</h1>
+      <span class="desc" id="srcInfo">Importe une Bible (JSON) ou une liste de versets.</span>
+      <span class="badge badge-off" id="onair" style="margin-left:auto">● Hors antenne</span>
+    </div>
+
+    <div class="app-grid">
+      <div class="col">
+        <section class="panel active" data-panel="direct">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">▶ Direct</div>
+            <div class="card-description"><kbd>←</kbd> <kbd>→</kbd> verset précédent / suivant · <kbd>Échap</kbd> masquer</div>
+          </div>
+          <div class="card-content">
+
+            <div class="field" id="versionField">
+              <label class="label">Version <span class="hint" id="verInfo"></span></label>
+              <div class="ver-chips" id="verChips"></div>
+            </div>
+
+            <!-- Mode Bible complète -->
+            <div id="bibleControls" class="hidden">
+              <div class="field">
+                <label class="label" for="refSearch">Référence <span class="hint">ex : Jean 3:16 · Ps 23 · 1 Co 13:4</span></label>
+                <div class="row" style="gap:8px">
+                  <input class="input" id="refSearch" type="text" placeholder="Jean 3:16" style="flex:1">
+                  <button class="btn btn-brand" id="goBtn">Aller</button>
+                </div>
+              </div>
+              <div class="grid-bcv">
+                <div class="field"><label class="label" for="bookSel">Livre</label><select class="input" id="bookSel"></select></div>
+                <div class="field"><label class="label" for="chapSel">Chap.</label><select class="input" id="chapSel"></select></div>
+                <div class="field"><label class="label" for="verseSel">Verset</label><select class="input" id="verseSel"></select></div>
+              </div>
+
+              <div class="field" style="margin-top:12px">
+                <label class="label" for="textSearch">Rechercher dans le texte <span class="hint" id="searchCount">un mot, une phrase ou un bout de phrase</span></label>
+                <div class="search-wrap">
+                  <input class="input" id="textSearch" type="text" placeholder="ex : tant aimé le monde · mon berger · paix" autocomplete="off">
+                  <button type="button" class="clearBtn hidden" id="searchClear" title="Effacer la recherche" aria-label="Effacer">✕</button>
+                </div>
+                <select class="input" id="searchScope" style="margin:6px 0">
+                  <option value="all">Dans toute la Bible</option>
+                  <option value="ot">Ancien Testament seulement</option>
+                  <option value="nt">Nouveau Testament seulement</option>
+                </select>
+                <div class="sres-list" id="searchResults"></div>
+                <div class="hint text-xs" id="searchHelp" style="margin-top:4px">👆 Clique un verset pour l'afficher · <kbd>↑</kbd><kbd>↓</kbd> naviguer · <kbd>Entrée</kbd> afficher</div>
+              </div>
+            </div>
+
+            <div class="now">
+              <div class="nr" id="nowRef">—</div>
+              <div class="nt empty" id="nowText">Aucun verset chargé</div>
+            </div>
+
+            <div class="row between">
+              <span class="badge badge-secondary tabnum" id="counter">—</span>
+              <span class="muted text-xs" id="partInfo"></span>
+            </div>
+
+            <div class="btn-row">
+              <button class="btn btn-outline" id="prevBtn">◀ Précédent</button>
+              <button class="btn btn-brand" id="nextBtn">Suivant ▶</button>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" id="showBtn">Afficher</button>
+              <button class="btn btn-secondary" id="hideBtn">Masquer</button>
+            </div>
+
+            <hr class="separator">
+            <div class="field list-field">
+              <div class="label" id="listLabel">Versets</div>
+              <div class="list" id="list"></div>
+            </div>
+            <div class="status" id="status"></div>
+          </div>
+        </div>
+        </section>
+
+        <section class="panel" data-panel="import">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📥 Importer</div>
+            <div class="card-description">
+              <b>Déjà intégrées</b> (onglet Direct) : Louis Segond 1910, Baiboly Malagasy 1865, King James, APEE.<br>
+              <b>Autre Bible</b> (ex. NKJV, si tu en as le fichier) : JSON <code>[{ "abbrev": "gn", "chapters": [[…versets…]] }]</code> — 66 livres. Elle s'ajoute aux versions.<br>
+              <b>Liste de versets</b> : JSON <code>[{ "ref": "...", "text": "..." }]</code> ou texte <b>#&nbsp;Référence</b> + texte.
+            </div>
+          </div>
+          <div class="card-content">
+            <div class="field">
+              <label class="label" for="importLang">Langue des noms de livres <span class="hint">pour une Bible importée</span></label>
+              <select class="input" id="importLang">
+                <option value="auto">Automatique (d'après le nom du fichier)</option>
+                <option value="fr">Français</option><option value="mg">Malagasy</option><option value="en">English</option>
+              </select>
+            </div>
+            <div class="btn-row">
+              <input type="file" id="jsonInput" accept=".json,application/json" style="display:none">
+              <input type="file" id="txtInput" accept=".txt,text/plain" style="display:none">
+              <button class="btn btn-brand btn-sm" id="jsonBtn">📄 Importer un .json</button>
+              <button class="btn btn-secondary btn-sm" id="txtBtn">📁 Importer un .txt</button>
+              <button class="btn btn-ghost btn-sm" id="clearBtn">Vider</button>
+            </div>
+            <div class="status show" id="importInfo" style="opacity:1">Aucune source chargée.</div>
+            <div class="field">
+              <label class="label" for="rawInput">…ou coller ici <span class="hint">(liste de versets / texte — pas une Bible entière)</span></label>
+              <textarea class="input" id="rawInput" spellcheck="false" style="min-height:200px" placeholder='[
+  { "ref": "Jean 3:16", "text": "Car Dieu a tant aimé le monde..." }
+]
+
+— ou —
+
+# Jean 3:16
+Car Dieu a tant aimé le monde...'></textarea>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-secondary" id="loadBtn">Charger le texte collé</button>
+            </div>
+          </div>
+        </div>
+        </section>
+      </div>
+
+      <div class="col">
+        <section class="panel" data-panel="preview">
+        <div class="card">
+          <div class="card-header"><div class="card-title">👁️ Aperçu</div></div>
+          <div class="card-content"><div class="preview-frame"><iframe id="preview" title="Aperçu Bible"></iframe></div></div>
+        </div>
+        </section>
+
+        <section class="panel" data-panel="style">
+        <div class="card">
+          <div class="card-header"><div class="card-title">🎨 Style</div></div>
+          <div class="card-content">
+            <div class="field">
+              <label class="label" for="position">Position</label>
+              <select class="input" id="position">
+                <option value="bottom">En bas</option><option value="center">Centré</option><option value="top">En haut</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="label" for="bgMode">Fond</label>
+              <select class="input" id="bgMode">
+                <option value="gradient">Dégradé transparent (recommandé)</option>
+                <option value="band">Bandeau plein</option>
+                <option value="none">Aucun (texte seul)</option>
+              </select>
+            </div>
+            <div class="grid-3">
+              <div class="field"><label class="label" for="accent">Accent</label><input class="color" id="accent" type="color" value="#b08d4f"></div>
+              <div class="field"><label class="label" for="bg1">Fond haut</label><input class="color" id="bg1" type="color" value="#060e26"></div>
+              <div class="field"><label class="label" for="bg2">Fond bas</label><input class="color" id="bg2" type="color" value="#04091a"></div>
+            </div>
+            <div class="field">
+              <label class="label" for="bgOpacity">Opacité du fond <span class="hint tabnum" id="bgOpacityVal">88 %</span></label>
+              <input id="bgOpacity" type="range" min="0" max="100" value="88" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="textSize">Taille du verset <span class="hint tabnum" id="textSizeVal">42 px</span></label>
+              <input id="textSize" type="range" min="22" max="80" value="42" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="refSize">Taille de la référence <span class="hint tabnum" id="refSizeVal">22 px</span></label>
+              <input id="refSize" type="range" min="10" max="44" value="22" style="width:100%">
+            </div>
+            <label class="chk"><input type="checkbox" id="wholeVerse" checked> Toujours afficher le verset en entier (sans le couper)</label>
+            <div class="field" id="maxCharsField">
+              <label class="label" for="maxChars">Longueur max par écran <span class="hint tabnum" id="maxCharsVal">150 car.</span></label>
+              <input id="maxChars" type="range" min="60" max="400" step="10" value="150" style="width:100%">
+              <div class="muted text-xs">Un verset plus long est coupé en plusieurs écrans.</div>
+            </div>
+            <hr class="separator">
+            <label class="chk"><input type="checkbox" id="showRef" checked> Afficher la référence</label>
+            <label class="chk"><input type="checkbox" id="refBelow"> Référence sous le verset</label>
+            <label class="chk"><input type="checkbox" id="showVersion" checked> Afficher la version après la référence (· LSG, · MG…)</label>
+          </div>
+          <div class="card-footer">
+            <button class="btn btn-outline btn-sm" id="copyBtn">📋 Copier l'URL overlay</button>
+            <button class="btn btn-ghost btn-sm" id="resetBtn">↺ Réinitialiser le style</button>
+          </div>
+        </div>
+        </section>
+      </div>
+    </div>
+
+    <nav class="mobile-tabs">
+      <button data-target="direct" class="active">▶<span>Direct</span></button>
+      <button data-target="import">📥<span>Import</span></button>
+      <button data-target="style">🎨<span>Style</span></button>
+      <button data-target="preview">👁️<span>Aperçu</span></button>
+    </nav>
+  </div>
+
+  <script>
+    const CHANNEL = 'bible', STATE_KEY = 'bible-state', DOCK_KEY = 'bible-dock';
+    const channel = ('BroadcastChannel' in window) ? new BroadcastChannel(CHANNEL) : null;
+    const $ = (id) => document.getElementById(id);
+    const preview = $('preview'), statusEl = $('status'), onair = $('onair');
+
+    // exclusivité mutuelle
+    const SOLO_KEY = 'overlay-solo', MY_ID = 'bible';
+    const soloCh = ('BroadcastChannel' in window) ? new BroadcastChannel(SOLO_KEY) : null;
+    const announceSolo = () => { const m = { owner: MY_ID, ts: Date.now() }; try { localStorage.setItem(SOLO_KEY, JSON.stringify(m)); } catch (_) {} if (soloCh) soloCh.postMessage(m); };
+    const onSolo = (m) => { if (m && m.owner && m.owner !== MY_ID && visible) hideOverlay(); };
+    if (soloCh) soloCh.onmessage = (e) => onSolo(e.data);
+    window.addEventListener('storage', (e) => { if (e.key === SOLO_KEY && e.newValue) { try { onSolo(JSON.parse(e.newValue)); } catch (_) {} } });
+
+    const styleText = ['position','bgMode','accent','bg1','bg2','bgOpacity','textSize','refSize','maxChars'];
+    const styleCheck = ['showRef','refBelow','showVersion','wholeVerse'];
+    const sizeFields = ['textSize','refSize'];
+
+    // ---------- Noms français des 66 livres ----------
+    const FR = { gn:'Genèse', ex:'Exode', lv:'Lévitique', nm:'Nombres', dt:'Deutéronome', js:'Josué', jud:'Juges', rt:'Ruth',
+      '1sm':'1 Samuel','2sm':'2 Samuel','1kgs':'1 Rois','2kgs':'2 Rois','1ch':'1 Chroniques','2ch':'2 Chroniques',
+      ezr:'Esdras', ne:'Néhémie', et:'Esther', job:'Job', ps:'Psaumes', prv:'Proverbes', ec:'Ecclésiaste',
+      so:'Cantique des cantiques', is:'Ésaïe', jr:'Jérémie', lm:'Lamentations', ez:'Ézéchiel', dn:'Daniel',
+      ho:'Osée', jl:'Joël', am:'Amos', ob:'Abdias', jn:'Jonas', mi:'Michée', na:'Nahum', hk:'Habacuc',
+      zp:'Sophonie', hg:'Aggée', zc:'Zacharie', ml:'Malachie', mt:'Matthieu', mk:'Marc', lk:'Luc', jo:'Jean',
+      act:'Actes', rm:'Romains','1co':'1 Corinthiens','2co':'2 Corinthiens', gl:'Galates', eph:'Éphésiens',
+      ph:'Philippiens', cl:'Colossiens','1ts':'1 Thessaloniciens','2ts':'2 Thessaloniciens','1tm':'1 Timothée',
+      '2tm':'2 Timothée', tt:'Tite', phm:'Philémon', hb:'Hébreux', jm:'Jacques','1pe':'1 Pierre','2pe':'2 Pierre',
+      '1jo':'1 Jean','2jo':'2 Jean','3jo':'3 Jean', jd:'Jude', re:'Apocalypse' };
+
+    // Identifiants dans l'ordre canonique (la même position = le même livre dans toutes les versions)
+    const ORDER = Object.keys(FR);
+    // Noms des livres de la Bible malgache protestante (liste de nybaiboly.net)
+    const MG = ['Genesisy','Eksodosy','Levitikosy','Nomery','Deoteronomia','Josoa','Mpitsara','Rota','1 Samoela','2 Samoela',
+      '1 Mpanjaka','2 Mpanjaka','1 Tantara','2 Tantara','Ezra','Nehemia','Estera','Joba','Salamo','Ohabolana','Mpitoriteny',
+      "Tononkiran'i Solomona",'Isaia','Jeremia','Fitomaniana','Ezekiela','Daniela','Hosea','Joela','Amosa','Obadia','Jona','Mika',
+      'Nahoma','Habakoka','Zefania','Hagay','Zakaria','Malakia','Matio','Marka','Lioka','Jaona',"Asan'ny Apostoly",'Romana',
+      '1 Korintiana','2 Korintiana','Galatiana','Efesiana','Filipiana','Kolosiana','1 Tesaloniana','2 Tesaloniana','1 Timoty',
+      '2 Timoty','Titosy','Filemona','Hebreo','Jakoba','1 Petera','2 Petera','1 Jaona','2 Jaona','3 Jaona','Joda','Apokalypsy'];
+    const EN = ['Genesis','Exodus','Leviticus','Numbers','Deuteronomy','Joshua','Judges','Ruth','1 Samuel','2 Samuel','1 Kings',
+      '2 Kings','1 Chronicles','2 Chronicles','Ezra','Nehemiah','Esther','Job','Psalms','Proverbs','Ecclesiastes','Song of Solomon',
+      'Isaiah','Jeremiah','Lamentations','Ezekiel','Daniel','Hosea','Joel','Amos','Obadiah','Jonah','Micah','Nahum','Habakkuk',
+      'Zephaniah','Haggai','Zechariah','Malachi','Matthew','Mark','Luke','John','Acts','Romans','1 Corinthians','2 Corinthians',
+      'Galatians','Ephesians','Philippians','Colossians','1 Thessalonians','2 Thessalonians','1 Timothy','2 Timothy','Titus',
+      'Philemon','Hebrews','James','1 Peter','2 Peter','1 John','2 John','3 John','Jude','Revelation'];
+    const NAMES = { fr: ORDER.map(k => FR[k]), mg: MG, en: EN };
+
+    // Versions intégrées : données dans le dossier « bibles/ » (fichiers .js : un fetch() est impossible sur file://)
+    const VERSIONS = [
+      { id:'ls1910', short:'LSG',  name:'Louis Segond 1910',     lang:'fr', file:'bibles/ls1910.js' },
+      { id:'mg1865', short:'MG',   name:'Baiboly Malagasy 1865', lang:'mg', file:'bibles/mg1865.js' },
+      { id:'kjv',    short:'KJV',  name:'King James Version',    lang:'en', file:'bibles/kjv.js' },
+      { id:'apee',   short:'APEE', name:'APEE (français)',       lang:'fr', file:'bibles/apee.js' }
+    ];
+    const DEFAULT_VERSION = 'ls1910';
+
+    const noAcc =(s) => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+
+    // ---------- état ----------
+    let mode = 'none';        // 'bible' | 'list' | 'none'
+    let loadError = '';       // dernière erreur de chargement d'une version (affichée si rien n'est chargé)
+    let version = null;       // 'ls1910' | 'mg1865' | 'kjv' | 'apee' | 'custom' (importée) | 'list' (liste de versets)
+    let customData = null;    // Bible importée : { meta:{short,name,lang}, books:[{abbrev,name,chapters}] }
+    let bible = [];           // [{abbrev, fr (nom affiché), alias, chapters}]
+    let bi = 0, ci = 0, vi = 0;          // livre / chapitre / verset (mode bible)
+    let verses = [];          // mode liste : [{ref,text,parts}]
+    let li = 0;               // index dans la liste
+    let pIndex = 0;           // écran (verset découpé)
+    let curParts = [''];
+    let visible = false, seq = 0;
+
+    const folderUrl = () => { const p = location.pathname; return 'file:///' + p.substring(0, p.lastIndexOf('/') + 1).replace(/\\/g, '/'); };
+    const baseUrl = folderUrl() + 'bible-overlay.html';
+
+    // ---------- IndexedDB (la Bible est trop grosse pour localStorage) ----------
+    const DBN='bible-dock-db', STORE='kv';
+    const idb = () => new Promise((res, rej) => { try { const r = indexedDB.open(DBN,1);
+      r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } });
+    const idbSet = async (k,v) => { const d = await idb(); return new Promise((res,rej)=>{ const t=d.transaction(STORE,'readwrite'); t.objectStore(STORE).put(v,k); t.oncomplete=()=>res(true); t.onerror=()=>rej(t.error); }); };
+    const idbGet = async (k) => { const d = await idb(); return new Promise((res,rej)=>{ const t=d.transaction(STORE,'readonly'); const q=t.objectStore(STORE).get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); };
+
+    // ---------- helpers ----------
+    const hexToRgba = (hex, a) => { const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16); return `rgba(${r}, ${g}, ${b}, ${a})`; };
+    const escapeHtml = (s) => (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    // ---------- tap fiable sur mobile ----------
+    // Un simple 'click' peut « rater » sur téléphone (clavier virtuel qui se ferme, reste de défilement).
+    // On capture le geste (pointerdown -> pointerup) ; un vrai glissé (>10 px) reste un défilement.
+    const HAS_POINTER = 'PointerEvent' in window;
+    const onTap = (el, cb) => {
+      if (!HAS_POINTER) { el.addEventListener('click', cb); return; }
+      let sx=0, sy=0, st=0, down=false;
+      el.addEventListener('pointerdown', e => { sx=e.clientX; sy=e.clientY; st=Date.now(); down=true; try { el.setPointerCapture(e.pointerId); } catch(_){} });
+      el.addEventListener('pointerup', e => { if (!down) return; down=false;
+        if (Math.abs(e.clientX-sx)<10 && Math.abs(e.clientY-sy)<10 && Date.now()-st<1500) cb(e); });
+      el.addEventListener('pointercancel', () => { down=false; });
+    };
+    // Fait défiler UNIQUEMENT la liste (scrollIntoView ferait aussi sauter tout le panneau).
+    const keepVisible = (box, el) => { if (!box || !el) return;
+      const b=box.getBoundingClientRect(), r=el.getBoundingClientRect();
+      if (r.top < b.top) box.scrollTop -= (b.top - r.top); else if (r.bottom > b.bottom) box.scrollTop += (r.bottom - b.bottom); };
+
+    const chunk = (text, max) => { const w=String(text).split(/\s+/).filter(Boolean); const p=[]; let c='';
+      for (const x of w) { if (c && (c+' '+x).length > max) { p.push(c); c=x; } else c = c ? c+' '+x : x; }
+      if (c) p.push(c); return p.length ? p : ['']; };
+
+    const curRefText = () => {
+      if (mode === 'bible' && bible.length) {
+        const b = bible[bi]; const ch = b.chapters[ci] || [];
+        return { ref: b.fr + ' ' + (ci+1) + ':' + (vi+1), text: ch[vi] || '' };
+      }
+      if (mode === 'list' && verses.length) { const v = verses[li]; return { ref: v.ref, text: v.text }; }
+      return { ref:'', text:'' };
+    };
+    const rechunk = () => {
+      const { text } = curRefText();
+      // « verset entier » (par défaut) : jamais coupé ; sinon découpé en écrans de « longueur max »
+      curParts = $('wholeVerse').checked ? [String(text||'').trim()] : chunk(text, Number($('maxChars').value) || 150);
+      if (pIndex >= curParts.length) pIndex = curParts.length - 1;
+      if (pIndex < 0) pIndex = 0;
+    };
+
+    // ---------- versions ----------
+    const buildBooks = (data, lang) => data.map((chs, i) => {
+      const name = (NAMES[lang] || NAMES.fr)[i];
+      return { abbrev: ORDER[i], name, fr: name, alias: [ORDER[i], FR[ORDER[i]], MG[i], EN[i]].map(noAcc), chapters: chs };
+    });
+    // Bible importée : noms de livres dans la langue choisie (l'ordre canonique sert si l'identifiant est inconnu)
+    const buildCustomBooks = (books, lang) => books.map((b, k) => {
+      const idx = ORDER.indexOf(b.abbrev), i = idx >= 0 ? idx : k, list = NAMES[lang] || NAMES.fr;
+      const name = (idx >= 0 || books.length === 66) ? list[i] : (b.name || b.abbrev || ('Livre ' + (k+1)));
+      return { abbrev: b.abbrev || ORDER[i] || String(k), name, fr: name,
+        alias: [b.abbrev, b.name, name, FR[b.abbrev], MG[i], EN[i]].filter(Boolean).map(noAcc), chapters: b.chapters };
+    });
+    const scriptLoads = {};
+    const loadScriptOnce = (src) => scriptLoads[src] || (scriptLoads[src] = new Promise((res, rej) => {
+      const s = document.createElement('script'); s.src = src;
+      s.onload = () => res();
+      s.onerror = () => { delete scriptLoads[src]; rej(new Error('fichier introuvable : ' + src)); };
+      document.head.appendChild(s); }));
+    const verList = () => {
+      const l = VERSIONS.slice();
+      if (customData) l.push({ id:'custom', short: customData.meta.short || 'Import', name: customData.meta.name || 'Bible importée', lang: customData.meta.lang || 'fr' });
+      if (verses.length) l.push({ id:'list', short:'Ma liste', name:'Liste de versets importée' });
+      return l;
+    };
+    const curMeta = () => verList().find(v => v.id === version) || null;
+    // Si le verset visé est vide dans cette version (ex. titre de Psaume absent du texte malgache),
+    // on prend le suivant, sinon le précédent.
+    const settleVerse = () => {
+      if (mode !== 'bible' || !bible[bi]) return;
+      const ch = bible[bi].chapters[ci] || [];
+      if (ch[vi]) return;
+      for (let k = vi + 1; k < ch.length; k++) if (ch[k]) { vi = k; return; }
+      for (let k = vi - 1; k >= 0; k--) if (ch[k]) { vi = k; return; }
+    };
+    const loadVersion = async (id, keepPos) => {
+      const prev = (mode === 'bible') ? { bi, ci, vi } : null;
+      if (id === 'list') {
+        if (!verses.length) throw new Error('aucune liste de versets');
+        mode = 'list'; version = 'list'; li = Math.min(li, verses.length - 1); pIndex = 0;
+        $('srcInfo').textContent = verses.length + ' versets (liste)';
+        return;
+      }
+      let books, meta;
+      if (id === 'custom') {
+        if (!customData) throw new Error('aucune Bible importée');
+        meta = customData.meta; books = buildCustomBooks(customData.books, meta.lang || 'fr');
+      } else {
+        meta = VERSIONS.find(v => v.id === id); if (!meta) throw new Error('version inconnue : ' + id);
+        await loadScriptOnce(meta.file);
+        const data = window.BIBLE_DATA && window.BIBLE_DATA[id];
+        if (!data) throw new Error('données absentes : ' + meta.file);
+        books = buildBooks(data, meta.lang);
+      }
+      bible = books; mode = 'bible'; version = id; pIndex = 0;
+      if (keepPos && prev) {   // même livre / chapitre / verset dans la nouvelle version (limité à ce qui existe)
+        bi = Math.min(prev.bi, bible.length - 1);
+        ci = Math.min(prev.ci, bible[bi].chapters.length - 1);
+        vi = Math.min(prev.vi, Math.max(0, (bible[bi].chapters[ci] || []).length - 1));
+      } else { bi = 0; ci = 0; vi = 0; }
+      settleVerse();
+      delete $('bookSel').dataset.n;   // les noms de livres changent avec la langue : on reconstruit la liste
+      const n = bible.reduce((a, b) => a + b.chapters.reduce((x, c) => x + c.length, 0), 0);
+      $('srcInfo').textContent = (meta.name || id) + ' · ' + bible.length + ' livres · ' + n.toLocaleString('fr-FR') + ' versets';
+      $('importInfo').textContent = '📖 Version active : ' + (meta.name || id) + ' — ' + n.toLocaleString('fr-FR') + ' versets';
+      sIdx = null; searchDirty = true;                                         // la recherche doit se refaire dans la nouvelle version
+      setTimeout(() => { try { if (mode === 'bible') buildIndex(); } catch (e) {} }, 1500);   // index prêt avant la 1re recherche
+    };
+    const renderVerChips = () => {
+      const wrap = $('verChips'); wrap.innerHTML = '';
+      verList().forEach(v => {
+        const el = document.createElement('button'); el.type = 'button';
+        el.className = 'chip' + (v.id === version ? ' active' : ''); el.title = v.name;
+        el.textContent = v.short + (v.id === 'list' ? ' (' + verses.length + ')' : '');
+        onTap(el, () => selectVersion(v.id));
+        wrap.appendChild(el);
+      });
+      const m = curMeta(); $('verInfo').textContent = m ? m.name : '';
+    };
+    // Changer de version garde la même référence ; si un verset est à l'antenne, son texte est remplacé en direct.
+    const selectVersion = async (id) => {
+      if (id === version) return;
+      toast('Chargement…');
+      try { await loadVersion(id, true); } catch (e) { toast('❌ ' + e.message); return; }
+      push(); const m = curMeta(); toast('✓ ' + (m ? m.name : id));
+    };
+
+    const buildConfig = () => {
+      const { ref } = curRefText();
+      const a = (Number($('bgOpacity').value)/100).toFixed(2);
+      const multi = curParts.length > 1;
+      const m = (mode === 'bible') ? curMeta() : null;
+      const verTag = (m && $('showVersion').checked) ? ' · ' + m.short : '';
+      return {
+        ref: ref ? (ref + verTag + (multi ? '  (' + (pIndex+1) + '/' + curParts.length + ')' : '')) : '',
+        text: curParts[pIndex] || '',
+        showRef: $('showRef').checked, refBelow: $('refBelow').checked,
+        bg: $('bgMode').value, position: $('position').value, accent: $('accent').value,
+        bg1: hexToRgba($('bg1').value, a), bg2: hexToRgba($('bg2').value, a),
+        textSize: $('textSize').value + 'px', refSize: $('refSize').value + 'px'
+      };
+    };
+    const send = (action) => {
+      const state = { config: buildConfig(), visible, seq, action };
+      try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (e) { toast('⚠️ Stockage du navigateur plein : ' + e.message); }
+      saveDock(); if (channel) channel.postMessage(state);
+    };
+    const push = () => { rechunk(); send('update'); render(); };
+
+    const setVisible = (v) => { visible = v;
+      onair.className = 'badge ' + (v ? 'badge-live' : 'badge-off');
+      onair.innerHTML = v ? '<span class="dot"></span> À l\'antenne' : '● Hors antenne';
+      onair.style.marginLeft = 'auto'; };
+    const toast = (m) => { statusEl.textContent = m; statusEl.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(()=>statusEl.classList.remove('show'), 2600); };
+    // filet de sécurité : une erreur inattendue s'affiche au lieu d'un clic qui « ne fait rien »
+    window.addEventListener('error', e => toast('⚠️ Erreur : ' + (e.message || 'inconnue')));
+    window.addEventListener('unhandledrejection', e => toast('⚠️ Erreur : ' + ((e.reason && e.reason.message) || e.reason || 'inconnue')));
+
+    const showCurrent = () => { setVisible(true); seq++; rechunk(); send('show'); announceSolo(); render(); };
+    const hideOverlay = () => { setVisible(false); seq++; send('hide'); render(); toast('■ Masqué.'); };
+
+    // ---------- navigation ----------
+    const nextVerse = () => {
+      if (mode === 'bible') {
+        if (!bible[bi]) return false;
+        let b = bi, c = ci, v = vi;
+        for (let guard = 0; guard < 400; guard++) {      // saute les versets vides
+          if (v < (bible[b].chapters[c]||[]).length - 1) v++;
+          else if (c < bible[b].chapters.length - 1) { c++; v = 0; }
+          else if (b < bible.length - 1) { b++; c = 0; v = 0; }
+          else return false;
+          if ((bible[b].chapters[c]||[])[v]) { bi = b; ci = c; vi = v; return true; }
+        }
+        return false;
+      }
+      if (mode === 'list') { if (li < verses.length - 1) { li++; return true; } return false; }
+      return false;
+    };
+    const prevVerse = () => {
+      if (mode === 'bible') {
+        if (!bible[bi]) return false;
+        let b = bi, c = ci, v = vi;
+        for (let guard = 0; guard < 400; guard++) {      // saute les versets vides
+          if (v > 0) v--;
+          else if (c > 0) { c--; v = Math.max(0, (bible[b].chapters[c]||[]).length - 1); }
+          else if (b > 0) { b--; c = bible[b].chapters.length - 1; v = Math.max(0, (bible[b].chapters[c]||[]).length - 1); }
+          else return false;
+          if ((bible[b].chapters[c]||[])[v]) { bi = b; ci = c; vi = v; return true; }
+        }
+        return false;
+      }
+      if (mode === 'list') { if (li > 0) { li--; return true; } return false; }
+      return false;
+    };
+    const next = () => { rechunk(); if (pIndex < curParts.length - 1) { pIndex++; } else { if (!nextVerse()) return; pIndex = 0; } showCurrent(); };
+    const prev = () => { if (pIndex > 0) { pIndex--; } else { if (!prevVerse()) return; rechunk(); pIndex = curParts.length - 1; } showCurrent(); };
+
+    // ---------- recherche dans le texte (mot, phrase ou bout de phrase) ----------
+    // Normalisation : sans accents, sans majuscules, sans ponctuation (« qu’il » = « qu il »), œ = oe.
+    const normS = (s) => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase()
+      .replace(/œ/g,'oe').replace(/æ/g,'ae').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+    let sIdx = null, searchDirty = false, sHi = 0, sTimer = null;
+    let sInfo = { q:'', words:[], list:[], more:[], exact:0, tier:1 };
+    const MAX_SRES = 200;
+    // index : un texte normalisé par verset, précédé d'une espace pour pouvoir chercher « début de mot »
+    const buildIndex = () => {
+      if (sIdx && sIdx.bible === bible) return sIdx;
+      const items = [];
+      bible.forEach((bk, b) => bk.chapters.forEach((ch, c) => ch.forEach((t, v) => { if (t) items.push({ b, c, v, n: ' ' + normS(t) }); })));
+      return (sIdx = { bible, items });
+    };
+    // 1) versets contenant la phrase exacte (en début de mot : « dieu » ne trouve pas « adieu »)
+    // 2) puis ceux qui contiennent tous les mots, dans n'importe quel ordre
+    // 3) si rien : le morceau cherché n'importe où dans un mot (« ternel » trouve « Éternel »)
+    const searchText = (raw, scope) => {
+      const q = normS(raw), out = { q, words: q ? q.split(' ') : [], list: [], more: [], exact: 0, tier: 1 };
+      if (q.length < 2) return out;
+      const items = buildIndex().items, inScope = (it) => scope === 'ot' ? it.b < 39 : scope === 'nt' ? it.b >= 39 : true;
+      const pad = ' ' + q, exactList = [], seen = new Set(), looseList = [];
+      for (const it of items) if (inScope(it) && it.n.includes(pad)) { exactList.push(it); seen.add(it); }
+      if (out.words.length > 1) { const ws = out.words.map(w => ' ' + w);
+        for (const it of items) if (!seen.has(it) && inScope(it) && ws.every(w => it.n.includes(w))) looseList.push(it); }
+      if (exactList.length) { out.list = exactList; out.more = looseList; out.exact = exactList.length; }   // la phrase exacte d'abord ; les autres sur demande
+      else if (looseList.length) { out.list = looseList; out.exact = 0; }                                 // pas de phrase exacte : tous les mots
+      else { out.tier = 3; for (const it of items) if (inScope(it) && it.n.includes(q)) out.list.push(it); out.exact = out.list.length; }
+      return out;
+    };
+    // surlignage dans le texte d'origine : expression tolérante aux accents et à la ponctuation
+    const ACC = { a:'aàâäáãå', c:'cç', e:'eéèêë', i:'iîïíì', o:'oôöóòõ', u:'uùûüú', y:'yÿý', n:'nñ' };
+    const wordRx = (w) => w.replace(/oe/g, '\u0001').replace(/ae/g, '\u0002').replace(/[aceiouyn]/g, ch => '[' + ACC[ch] + ']')
+      .replace(/\u0001/g, '(?:[oôöóòõ][eéèêë]|œ)').replace(/\u0002/g, '(?:[aàâäáãå][eéèêë]|æ)');
+    const hiRegex = (info) => { try {
+      const bnd = info.tier === 3 ? '' : '(?<![\\p{L}\\p{N}])', sep = '[^\\p{L}\\p{N}]+';
+      const phrase = bnd + info.words.map(wordRx).join(sep);
+      const each = info.words.length > 1 ? '|' + info.words.map(w => bnd + wordRx(w)).join('|') : '';
+      return new RegExp('(?:' + phrase + ')' + each, 'giu');
+    } catch (e) { return null; } };
+    const snippetHtml = (text, rx) => {
+      let start = 0, first = -1;
+      if (rx) { rx.lastIndex = 0; const m = rx.exec(text); if (m) first = m.index; }
+      if (first > 70) { start = text.lastIndexOf(' ', first - 50); if (start < 0) start = 0; }
+      const end = Math.min(text.length, start + 240), part = text.slice(start, end);
+      let html = '', last = 0;
+      if (rx) { rx.lastIndex = 0; let m; while ((m = rx.exec(part)) && m[0].length) { html += escapeHtml(part.slice(last, m.index)) + '<mark>' + escapeHtml(m[0]) + '</mark>'; last = m.index + m[0].length; } }
+      html += escapeHtml(part.slice(last));
+      return (start > 0 ? '… ' : '') + html + (end < text.length ? ' …' : '');
+    };
+    const markSearch = () => document.querySelectorAll('#searchResults .sres').forEach(el =>
+      el.classList.toggle('cur', mode === 'bible' && !!el._it && el._it.b === bi && el._it.c === ci && el._it.v === vi));
+    const renderSearch = (resetScroll) => {
+      const wrap = $('searchResults'), q = $('textSearch').value, keep = wrap.scrollTop;
+      $('searchClear').classList.toggle('hidden', !q);
+      if (!sInfo.q || sInfo.q.length < 2) { wrap.innerHTML = ''; $('searchCount').textContent = 'un mot, une phrase ou un bout de phrase'; return; }
+      const total = sInfo.list.length, plural = total > 1 ? 's' : '';
+      if (!total) { wrap.innerHTML = '<div class="sres-note">Aucun verset ne contient « ' + escapeHtml(q.trim()) + ' » dans cette version' + ($('searchScope').value !== 'all' ? ' (testament choisi)' : '') + '.</div>'; $('searchCount').textContent = '0 résultat'; return; }
+      const shown = sInfo.list.slice(0, MAX_SRES), rx = hiRegex(sInfo);
+      sHi = Math.max(0, Math.min(sHi, shown.length - 1));
+      $('searchCount').textContent = total + ' résultat' + plural + (total > MAX_SRES ? ' · ' + MAX_SRES + ' affichés' : '') + (sInfo.exact > 0 && sInfo.exact < total && sInfo.tier !== 3 ? ' · ' + sInfo.exact + ' avec la phrase exacte' : '');
+      wrap.innerHTML = '';
+      const note = (t) => { const d = document.createElement('div'); d.className = 'sres-note'; d.textContent = t; wrap.appendChild(d); };
+      if (sInfo.exact === 0 && sInfo.tier !== 3) note('Aucune phrase exacte : versets qui contiennent tous les mots');
+      shown.forEach((it, idx) => {
+        if (idx === sInfo.exact && sInfo.exact > 0 && sInfo.exact < total && sInfo.tier !== 3) note('Contiennent aussi tous les mots (dans un autre ordre)');
+        const bk = bible[it.b], text = bk.chapters[it.c][it.v];
+        const el = document.createElement('button'); el._it = it; el.type = 'button';
+        el.className = 'sres' + (idx === sHi ? ' hl' : '') + (it.b === bi && it.c === ci && it.v === vi ? ' cur' : '');
+        el.innerHTML = '<span class="r">' + escapeHtml(bk.fr + ' ' + (it.c+1) + ':' + (it.v+1)) + '</span><span class="t">' + snippetHtml(text, rx) + '</span>';
+        onTap(el, () => pickSearch(idx));
+        wrap.appendChild(el);
+      });
+      if (sInfo.more.length) {                          // phrase exacte trouvée : les versets « tous les mots » restent accessibles
+        const more = document.createElement('button'); more.type = 'button'; more.className = 'sres more';
+        more.innerHTML = '<span class="t">＋ Afficher aussi les ' + sInfo.more.length + ' versets qui contiennent tous les mots (dans un autre ordre)</span>';
+        onTap(more, () => { sInfo.list = sInfo.list.concat(sInfo.more); sInfo.more = []; renderSearch(false); });
+        wrap.appendChild(more);
+      }
+      wrap.scrollTop = resetScroll ? 0 : keep;
+    };
+    // clic (ou Entrée) sur un résultat : le verset entier s'affiche à l'antenne
+    const pickSearch = (idx) => { const it = sInfo.list[idx]; if (!it) return; sHi = idx; bi = it.b; ci = it.c; vi = it.v; pIndex = 0; showCurrent(); };
+    const doSearch = () => {
+      if (mode !== 'bible') { sInfo = { q:'', words:[], list:[], more:[], exact:0, tier:1 }; renderSearch(true); return; }
+      sInfo = searchText($('textSearch').value, $('searchScope').value); sHi = 0; renderSearch(true);
+    };
+    $('textSearch').addEventListener('input', () => { clearTimeout(sTimer); $('searchClear').classList.toggle('hidden', !$('textSearch').value); sTimer = setTimeout(() => { sTimer = null; doSearch(); }, 260); });
+    $('textSearch').addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (!sInfo.list.length) return; e.preventDefault();
+        const n = Math.min(sInfo.list.length, MAX_SRES);
+        sHi = e.key === 'ArrowDown' ? Math.min(n - 1, sHi + 1) : Math.max(0, sHi - 1);
+        renderSearch(false); keepVisible($('searchResults'), $('searchResults').querySelector('.hl'));
+      } else if (e.key === 'Enter') { e.preventDefault(); if (sTimer) { clearTimeout(sTimer); sTimer = null; doSearch(); } pickSearch(sHi); }
+      else if (e.key === 'Escape') { if ($('textSearch').value) { $('textSearch').value = ''; doSearch(); } }
+    });
+    $('searchClear').addEventListener('click', () => { $('textSearch').value = ''; doSearch(); $('textSearch').focus(); });
+    $('searchScope').addEventListener('change', doSearch);
+
+    // ---------- recherche de référence ----------
+    const findBook = (q) => {
+      const n = noAcc(q);
+      if (!n) return -1;
+      // nom exact ou abréviation, dans n'importe quelle langue (Jean / John / Jaona…)
+      let i = bible.findIndex(b => b.alias.includes(n));
+      if (i >= 0) return i;
+      i = bible.findIndex(b => noAcc(b.fr).startsWith(n));          // début du nom affiché
+      if (i >= 0) return i;
+      return bible.findIndex(b => b.alias.some(a => a.startsWith(n)));   // début d'un nom dans une autre langue
+    };
+    const gotoRef = (q) => {
+      if (mode !== 'bible') { toast('Charge d\'abord une Bible complète.'); return; }
+      const m = String(q).trim().match(/^(.+?)\s*(\d+)?\s*(?:[:.,v\s]\s*(\d+))?$/i);
+      if (!m) { toast('Référence non comprise.'); return; }
+      const bIdx = findBook(m[1]);
+      if (bIdx < 0) { toast('Livre introuvable : « ' + m[1] + ' »'); return; }
+      bi = bIdx;
+      const b = bible[bi];
+      ci = Math.min(Math.max(1, parseInt(m[2]||'1',10)) - 1, b.chapters.length - 1);
+      vi = Math.min(Math.max(1, parseInt(m[3]||'1',10)) - 1, Math.max(0,(b.chapters[ci]||[]).length - 1));
+      settleVerse();
+      pIndex = 0; showCurrent();
+    };
+
+    // ---------- rendu ----------
+    const fillSel = (sel, n, cur, label) => {
+      if (sel.dataset.n !== String(n)) { sel.innerHTML = Array.from({length:n}, (_,k)=>`<option value="${k}">${label?label(k):(k+1)}</option>`).join(''); sel.dataset.n = String(n); }
+      sel.value = String(cur);
+    };
+    const render = () => {
+      renderVerChips();
+      if (searchDirty) { searchDirty = false; if ($('textSearch').value.trim()) doSearch(); }   // nouvelle version : on relance la recherche
+      markSearch();
+      $('bibleControls').classList.toggle('hidden', mode !== 'bible');
+      const { ref, text } = curRefText();
+      $('nowRef').textContent = ref || '—';
+      $('nowText').textContent = curParts[pIndex] || text || 'Aucun verset chargé';
+      $('nowText').classList.toggle('empty', !text);
+      $('partInfo').textContent = curParts.length > 1 ? ('écran ' + (pIndex+1) + '/' + curParts.length) : '';
+
+      const wrap = $('list');
+      if (mode === 'bible' && bible.length) {
+        const b = bible[bi];
+        fillSel($('bookSel'), bible.length, bi, k => bible[k].fr);
+        fillSel($('chapSel'), b.chapters.length, ci);
+        fillSel($('verseSel'), (b.chapters[ci]||[]).length, vi);
+        $('counter').textContent = b.fr + ' ' + (ci+1);
+        $('listLabel').textContent = 'Versets — ' + b.fr + ' ' + (ci+1);
+        const ch = b.chapters[ci] || [];
+        wrap.innerHTML = '';
+        ch.forEach((t, k) => {
+          const el = document.createElement('button');
+          el.className = 'vrs' + (k === vi ? ' cur' : '') + (t ? '' : ' empty');
+          el.innerHTML = '<span class="i">' + (k+1) + '</span><span class="t">' + (t ? escapeHtml(t.slice(0,140)) : '(vide dans cette version — titre du Psaume non fourni)') + '</span>';
+          onTap(el, () => { if (!t) { toast('Ce verset est vide dans cette version.'); return; } vi = k; pIndex = 0; showCurrent(); });
+          wrap.appendChild(el);
+        });
+      } else if (mode === 'list' && verses.length) {
+        $('counter').textContent = (li+1) + ' / ' + verses.length;
+        $('listLabel').textContent = 'Versets';
+        wrap.innerHTML = '';
+        verses.forEach((v, k) => {
+          const el = document.createElement('button');
+          el.className = 'vrs' + (k === li ? ' cur' : '');
+          el.innerHTML = '<span class="i">' + (k+1) + '</span><span><span class="r">' + escapeHtml(v.ref||'—') + '</span><br><span class="t">' + escapeHtml(v.text.slice(0,90)) + '</span></span>';
+          onTap(el, () => { li = k; pIndex = 0; showCurrent(); });
+          wrap.appendChild(el);
+        });
+      } else {
+        $('counter').textContent = '—'; $('listLabel').textContent = 'Versets';
+        wrap.innerHTML = '<div class="muted text-sm" style="padding:10px">Aucune Bible chargée. Choisis une version ci-dessus' + (loadError ? ' <br><span style="color:hsl(var(--destructive))">(' + escapeHtml(loadError) + ')</span>' : '') + ', ou importe un fichier dans l\'onglet « Import ».</div>';
+        return;
+      }
+      keepVisible(wrap, wrap.querySelector('.cur'));
+    };
+
+    // ---------- import ----------
+    const isFullBible = (j) => Array.isArray(j) && j.length > 20 && j[0] && Array.isArray(j[0].chapters) && Array.isArray(j[0].chapters[0]);
+    const normalizeList = (json) => {
+      let arr = Array.isArray(json) ? json : (json && (json.verses || json.data || json.items || json.results)) || null;
+      if (!arr && json && typeof json === 'object') arr = Object.entries(json).filter(([,v])=>typeof v==='string').map(([k,v])=>({ref:k,text:v}));
+      if (!Array.isArray(arr)) return [];
+      return arr.map(v => {
+        if (typeof v === 'string') return { ref:'', text:v };
+        const text = v.text ?? v.verse_text ?? v.content ?? v.t ?? v.verset ?? '';
+        let ref = v.ref ?? v.reference ?? v.title ?? v.citation ?? '';
+        if (!ref) { const b=v.book??v.book_name??v.livre, c=v.chapter??v.chapitre, n=v.verse??v.verse_number??v.numero;
+          if (b||c||n) ref = [b,c].filter(x=>x!=null&&x!=='').join(' ') + (n!=null&&n!==''?':'+n:''); }
+        return { ref:String(ref||'').trim(), text:String(text||'').trim() };
+      }).filter(v => v.text);
+    };
+    const parseText = (txt) => { const out=[]; let cur=null;
+      txt.split('\n').forEach(raw => { const l=raw.trim();
+        if (l.startsWith('#')) { cur={ref:l.replace(/^#+\s*/,''),text:''}; out.push(cur); return; }
+        if (!l) return; if (!cur) { cur={ref:'',text:''}; out.push(cur); }
+        cur.text = cur.text ? cur.text+' '+l : l; });
+      return out.filter(v=>v.text); };
+
+    // langue des noms de livres d'une Bible importée, devinée d'après le nom du fichier (modifiable dans l'onglet Import)
+    const guessLang = (label) => { const s = String(label||'').toLowerCase();
+      if (/(^|[^a-z])(en|nkjv|kjv|niv|esv|nasb|web|asv|bbe)([^a-z]|$)|english|anglais/.test(s)) return 'en';
+      if (/(^|[^a-z])(mg|mlg)([^a-z]|$)|malagasy|malgache|baiboly/.test(s)) return 'mg';
+      return 'fr'; };
+    // format getBible : { books:[{ nr, chapters:[{ chapter, verses:[{ verse, text }] }] }] }
+    const isGetBible = (j) => j && typeof j === 'object' && !Array.isArray(j) && j.books && (Array.isArray(j.books) ? j.books.length : Object.keys(j.books).length) >= 60;
+    const fromGetBible = (j) => {
+      const L = (x) => Array.isArray(x) ? x : Object.values(x);
+      return L(j.books).slice().sort((a,b)=>a.nr-b.nr).map((bk, i) => ({ abbrev: ORDER[i], chapters:
+        L(bk.chapters).slice().sort((a,b)=>a.chapter-b.chapter).map(c => {
+          const vs = L(c.verses).slice().sort((a,b)=>a.verse-b.verse), arr = new Array(vs.length ? vs[vs.length-1].verse : 0).fill('');
+          vs.forEach(v => { arr[v.verse-1] = String(v.text||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(); });
+          return arr; }) }));
+    };
+
+    const setBible = async (books, label) => {
+      const sel = $('importLang').value, lang = sel === 'auto' ? guessLang(label) : sel;
+      const short = String(label||'').replace(/\.[^.]+$/, '').replace(/^(en|fr|mg)[_\- ]/i, '').toUpperCase().slice(0, 8) || 'IMPORT';
+      customData = { meta: { short, name: label ? ('Importée : ' + label) : 'Bible importée', lang },
+        books: books.map(b => ({ abbrev: b.abbrev, name: b.name, chapters: b.chapters })) };
+      try { await idbSet('bible', customData); toast('✓ Bible importée et mémorisée.'); }
+      catch (e) { toast('✓ Bible importée (non mémorisée : à réimporter après redémarrage).'); }
+      try { await loadVersion('custom', true); } catch (e) { toast('❌ ' + e.message); return; }
+      push();
+    };
+
+    const handleJsonText = async (raw, label) => {
+      let j; try { j = JSON.parse(raw.replace(/^﻿/, '')); }   // enlève le BOM
+      catch (e) { toast('❌ JSON invalide : ' + e.message); return; }
+      if (isGetBible(j)) { await setBible(fromGetBible(j), label); return; }
+      if (isFullBible(j)) { await setBible(j, label); return; }
+      const list = normalizeList(j);
+      if (!list.length) { toast('❌ Aucun verset reconnu dans ce JSON.'); return; }
+      verses = list; li = 0;
+      try { await loadVersion('list'); } catch (e) { toast('❌ ' + e.message); return; }
+      $('importInfo').textContent = '📄 Liste chargée — ' + verses.length + ' versets' + (label?' ('+label+')':'');
+      push(); toast('✓ ' + verses.length + ' verset(s).');
+    };
+
+    $('jsonBtn').addEventListener('click', () => $('jsonInput').click());
+    $('txtBtn').addEventListener('click', () => $('txtInput').click());
+    $('jsonInput').addEventListener('change', e => { const f=e.target.files[0]; if(!f) return;
+      const r=new FileReader(); r.onload=()=>handleJsonText(String(r.result), f.name); r.readAsText(f,'utf-8'); e.target.value=''; });
+    $('txtInput').addEventListener('change', e => { const f=e.target.files[0]; if(!f) return;
+      const r=new FileReader(); r.onload=()=>{ $('rawInput').value=String(r.result); loadPasted(f.name); }; r.readAsText(f,'utf-8'); e.target.value=''; });
+
+    const loadPasted = (label) => {
+      const raw = $('rawInput').value.trim();
+      if (!raw) { toast('Rien à charger.'); return; }
+      if (raw.startsWith('[') || raw.startsWith('{')) { handleJsonText(raw, label); return; }
+      const list = parseText(raw);
+      if (!list.length) { toast('Aucun verset reconnu.'); return; }
+      verses = list; li = 0;
+      loadVersion('list').then(() => {
+        $('importInfo').textContent = '📄 Liste chargée — ' + verses.length + ' versets';
+        push(); toast('✓ ' + verses.length + ' verset(s).');
+      }).catch(e => toast('❌ ' + e.message));
+    };
+    $('loadBtn').addEventListener('click', () => loadPasted());
+    // « Vider » : retire la liste de versets et la Bible importée ; les versions intégrées restent disponibles
+    $('clearBtn').addEventListener('click', async () => {
+      $('rawInput').value = ''; verses = []; customData = null; li = 0;
+      try { await idbSet('bible', null); } catch (e) {}
+      const keep = VERSIONS.some(v => v.id === version) ? version : DEFAULT_VERSION;
+      try { await loadVersion(keep, true); } catch (e) { mode = 'none'; loadError = e.message; }
+      $('importInfo').textContent = 'Liste et Bible importée retirées. Les versions intégrées restent disponibles.';
+      push();
+    });
+
+    // ---------- contrôles ----------
+    $('goBtn').addEventListener('click', () => gotoRef($('refSearch').value));
+    $('refSearch').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); gotoRef($('refSearch').value); } });
+    $('bookSel').addEventListener('change', () => { bi = +$('bookSel').value; ci=0; vi=0; pIndex=0; push(); });
+    $('chapSel').addEventListener('change', () => { ci = +$('chapSel').value; vi=0; pIndex=0; push(); });
+    $('verseSel').addEventListener('change', () => { vi = +$('verseSel').value; settleVerse(); pIndex=0; showCurrent(); });
+    $('nextBtn').addEventListener('click', next);
+    $('prevBtn').addEventListener('click', prev);
+    $('showBtn').addEventListener('click', showCurrent);
+    $('hideBtn').addEventListener('click', hideOverlay);
+
+    const refreshLabels = () => {
+      sizeFields.forEach(f => { const el=$(f+'Val'); if (el) el.textContent = $(f).value + ' px'; });
+      $('bgOpacityVal').textContent = $('bgOpacity').value + ' %';
+      $('maxCharsVal').textContent = $('maxChars').value + ' car.';
+      $('maxCharsField').classList.toggle('hidden', $('wholeVerse').checked);   // le curseur n'a de sens que si on accepte de couper
+    };
+    [...styleText, ...styleCheck].forEach(f => $(f).addEventListener('input', () => { refreshLabels(); push(); }));
+
+    $('copyBtn').addEventListener('click', () => navigator.clipboard.writeText(baseUrl).then(()=>toast('📋 URL copiée.')).catch(()=>toast(baseUrl)));
+    $('resetBtn').addEventListener('click', () => {
+      const d={ position:'bottom', bgMode:'gradient', accent:'#b08d4f', bg1:'#060e26', bg2:'#04091a', bgOpacity:'88', textSize:'42', refSize:'22', maxChars:'150' };
+      Object.entries(d).forEach(([k,v]) => $(k).value=v);
+      $('showRef').checked=true; $('refBelow').checked=false; $('showVersion').checked=true; $('wholeVerse').checked=true;
+      refreshLabels(); push(); toast('↺ Style réinitialisé.');
+    });
+
+    document.addEventListener('keydown', e => {
+      const tag=(e.target.tagName||'').toLowerCase();
+      if (tag==='input'||tag==='textarea'||tag==='select') return;
+      if (e.key==='ArrowRight') { e.preventDefault(); next(); }
+      else if (e.key==='ArrowLeft') { e.preventDefault(); prev(); }
+      else if (e.key==='Escape') { e.preventDefault(); hideOverlay(); }
+      else if (e.key===' ') { e.preventDefault(); visible ? hideOverlay() : showCurrent(); }
+    });
+
+    // ---------- persistance ----------
+    const saveDock = () => {
+      const style={}; styleText.forEach(f=>style[f]=$(f).value); styleCheck.forEach(f=>style[f]=$(f).checked);
+      const o = { mode, version, style, pIndex, bi, ci, vi, li };
+      if (verses.length) o.verses = verses;            // petite liste -> localStorage OK (conservée même si on change de version)
+      try { localStorage.setItem(DOCK_KEY, JSON.stringify(o)); } catch (e) {}
+    };
+    const loadDock = async () => {
+      let o = {}; try { o = JSON.parse(localStorage.getItem(DOCK_KEY) || '{}'); } catch (e) {}
+      if (o.style) { styleText.forEach(f=>{ if(o.style[f]!=null) $(f).value=o.style[f]; }); styleCheck.forEach(f=>{ if(o.style[f]!=null) $(f).checked=o.style[f]; }); }
+      if (Array.isArray(o.verses) && o.verses.length) { verses = o.verses; li = Math.min(o.li||0, verses.length-1); }
+      // Bible importée par l'utilisateur (ancien format : tableau de livres ; nouveau : { meta, books })
+      try {
+        const c = await idbGet('bible');
+        if (Array.isArray(c) && c.length) customData = { meta:{ short:'Import', name:'Bible importée', lang:'fr' }, books:c };
+        else if (c && c.meta && Array.isArray(c.books)) customData = c;
+      } catch (e) {}
+      // version à ouvrir : celle d'avant le redémarrage ; sinon la Louis Segond (une Bible est donc toujours prête)
+      const wanted = [o.version, o.mode === 'list' ? 'list' : null, DEFAULT_VERSION].filter(Boolean);
+      let ok = false;
+      for (const id of wanted) { try { await loadVersion(id, false); ok = true; break; } catch (e) { loadError = e.message; } }
+      if (!ok) mode = 'none';
+      if (mode === 'bible' && (o.version === version || !o.version)) {   // retrouve le dernier verset affiché
+        bi = Math.min(o.bi||0, bible.length-1);
+        ci = Math.min(o.ci||0, Math.max(0, bible[bi].chapters.length-1));
+        vi = Math.min(o.vi||0, Math.max(0, (bible[bi].chapters[ci]||[]).length-1));
+        settleVerse();
+      }
+      pIndex = o.pIndex || 0;
+    };
+
+    // ---------- aperçu + onglets ----------
+    const scalePreview = () => { const fr=preview.parentElement; if (fr && fr.clientWidth>0) preview.style.transform='scale('+(fr.clientWidth/1920)+')'; };
+    window.addEventListener('resize', scalePreview);
+    if ('ResizeObserver' in window) new ResizeObserver(scalePreview).observe(preview.parentElement);
+    preview.addEventListener('load', scalePreview);
+    document.querySelectorAll('.mobile-tabs button').forEach(btn => btn.addEventListener('click', () => {
+      const t=btn.dataset.target;
+      document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===t));
+      document.querySelectorAll('.mobile-tabs button').forEach(b=>b.classList.toggle('active', b===btn));
+      scalePreview();
+    }));
+
+    // ---------- init ----------
+    (async () => {
+      await loadDock();
+      refreshLabels(); setVisible(false);
+      try { const p = JSON.parse(localStorage.getItem(STATE_KEY)||'null'); if (p && p.seq) seq = p.seq; } catch (e) {}
+      push();
+      preview.src = baseUrl + '?preview=1';
+      scalePreview();
+    })();
+  </script>
+</body>
+</html>
