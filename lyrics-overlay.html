@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paroles — Overlay</title>
+  <style>
+    :root {
+      --accent: #b08d4f;
+      --bg1: rgba(6, 14, 38, 0.86);
+      --bg2: rgba(4, 9, 26, 0.92);
+      --text-size: 46px;
+      --title-size: 20px;
+    }
+    html, body { width:100%; height:100%; margin:0; overflow:hidden; background:transparent;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+
+    .stage { position:absolute; inset:0; display:flex; padding:0; box-sizing:border-box; }
+    .stage[data-pos="bottom"] { align-items:flex-end;  justify-content:center; }
+    .stage[data-pos="center"] { align-items:center;    justify-content:center; }
+    .stage[data-pos="top"]    { align-items:flex-start; justify-content:center; }
+
+    /* bandeau PLEINE LARGEUR, collé au bord */
+    .band {
+      position:relative; box-sizing:border-box; width:100%;
+      display:flex; flex-direction:column; align-items:center; gap:6px;
+      padding:30px 6vw 34px;
+      background:none; border-radius:0; box-shadow:none;
+      color:#fff;
+      opacity:0; transform:translateY(22px);
+      transition:opacity .45s ease, transform .45s cubic-bezier(.16,.84,.2,1);
+    }
+    /* Couche de FOND séparée : permet un fondu très progressif sans toucher au texte */
+    .band::after {
+      content:""; position:absolute; inset:0; z-index:0; pointer-events:none;
+      background:linear-gradient(180deg, var(--bg1), var(--bg2));
+    }
+    /* le texte : centré, limité en largeur, AU-DESSUS du fond */
+    .title, .lines { position:relative; z-index:1; width:100%; max-width:min(1500px, 88vw); }
+    .band::before { content:""; position:absolute; top:0; left:28%; right:28%; height:3px; z-index:1;
+      background:linear-gradient(90deg, transparent, var(--accent), transparent); }
+
+    /* --- Fond : bandeau plein --- */
+    .stage[data-bg="band"] .band::after { box-shadow:0 -12px 34px rgba(0,0,0,.30); }
+
+    /* --- Fond : aucun --- */
+    .stage[data-bg="none"] .band { padding:16px 6vw; }
+    .stage[data-bg="none"] .band::after,
+    .stage[data-bg="none"] .band::before { display:none; }
+
+    /* --- Fond : dégradé transparent — fondu progressif par masque --- */
+    .stage[data-bg="gradient"] .band { padding:190px 6vw 56px; }
+    .stage[data-bg="gradient"] .band::before { display:none; }
+    .stage[data-bg="gradient"][data-pos="bottom"] .band::after {
+      -webkit-mask-image:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.04) 20%, rgba(0,0,0,.14) 34%, rgba(0,0,0,.34) 47%, rgba(0,0,0,.60) 59%, rgba(0,0,0,.82) 70%, rgba(0,0,0,.95) 80%, #000 90%);
+              mask-image:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.04) 20%, rgba(0,0,0,.14) 34%, rgba(0,0,0,.34) 47%, rgba(0,0,0,.60) 59%, rgba(0,0,0,.82) 70%, rgba(0,0,0,.95) 80%, #000 90%);
+    }
+    .stage[data-bg="gradient"][data-pos="top"] .band { padding:56px 6vw 190px; }
+    .stage[data-bg="gradient"][data-pos="top"] .band::after {
+      -webkit-mask-image:linear-gradient(to top, rgba(0,0,0,0) 0%, rgba(0,0,0,.04) 20%, rgba(0,0,0,.14) 34%, rgba(0,0,0,.34) 47%, rgba(0,0,0,.60) 59%, rgba(0,0,0,.82) 70%, rgba(0,0,0,.95) 80%, #000 90%);
+              mask-image:linear-gradient(to top, rgba(0,0,0,0) 0%, rgba(0,0,0,.04) 20%, rgba(0,0,0,.14) 34%, rgba(0,0,0,.34) 47%, rgba(0,0,0,.60) 59%, rgba(0,0,0,.82) 70%, rgba(0,0,0,.95) 80%, #000 90%);
+    }
+    .stage[data-bg="gradient"][data-pos="center"] .band { padding:140px 6vw 140px; }
+    .stage[data-bg="gradient"][data-pos="center"] .band::after {
+      -webkit-mask-image:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.5) 18%, #000 34%, #000 66%, rgba(0,0,0,.5) 82%, rgba(0,0,0,0) 100%);
+              mask-image:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,.5) 18%, #000 34%, #000 66%, rgba(0,0,0,.5) 82%, rgba(0,0,0,0) 100%);
+    }
+
+    .stage.is-visible .band { opacity:1; transform:translateY(0); }
+    .stage.is-hiding  .band { opacity:0; transform:translateY(16px); transition:opacity .35s ease, transform .35s ease; }
+
+    .title {
+      font-size:var(--title-size); letter-spacing:.2em; text-transform:uppercase;
+      color:var(--accent); font-weight:700; margin-bottom:4px; text-align:center;
+    }
+    .title:empty, .stage.no-title .title { display:none; }
+
+    .line {
+      font-size:var(--text-size); font-weight:700; line-height:1.22; text-align:center;
+      text-shadow:0 3px 14px rgba(0,0,0,.6), 0 1px 3px rgba(0,0,0,.8);
+      max-width:100%;
+    }
+    .line:empty { display:none; }
+
+    /* rejeu d'animation à chaque changement de paroles */
+    .lines.in .line { animation:riseIn .38s cubic-bezier(.18,.9,.22,1) both; }
+    .lines.in .line:nth-child(2) { animation-delay:.07s; }
+    @keyframes riseIn { 0% { opacity:0; transform:translateY(12px); } 100% { opacity:1; transform:translateY(0); } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .band { transition:none !important; }
+      .lines.in .line { animation:none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage" data-pos="bottom" data-bg="gradient">
+    <div class="band" id="band">
+      <div class="title" id="title"></div>
+      <div class="lines" id="lines">
+        <div class="line" id="l1"></div>
+        <div class="line" id="l2"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="overlay-stack.js"></script>
+  <script>
+    // URL STATIQUE : dans OBS -> file:///…/lyrics-overlay.html
+    const CHANNEL = 'lyrics';
+    const STATE_KEY = 'lyrics-state';
+    const root = document.documentElement;
+    const stage = document.getElementById('stage');
+    const linesEl = document.getElementById('lines');
+    const l1 = document.getElementById('l1'), l2 = document.getElementById('l2');
+    const titleEl = document.getElementById('title');
+
+    const VARS = { accent:'--accent', bg1:'--bg1', bg2:'--bg2', textSize:'--text-size', titleSize:'--title-size' };
+
+    let lastText = '';
+
+    const applyConfig = (c) => {
+      if (!c) return;
+      for (const [k, v] of Object.entries(VARS)) if (c[k] != null && c[k] !== '') root.style.setProperty(v, c[k]);
+      if (c.position) stage.setAttribute('data-pos', c.position);
+      // mode de fond : 'gradient' (dégradé transparent) | 'band' (bandeau) | 'none'
+      stage.setAttribute('data-bg', c.bg || (c.card === false ? 'none' : 'gradient'));
+      stage.classList.toggle('no-title', c.showTitle === false);
+      if (c.title != null) titleEl.textContent = c.title;
+
+      const t = (c.l1 || '') + '\n' + (c.l2 || '');
+      if (t !== lastText) {                    // rejoue l'animation seulement si le texte change
+        lastText = t;
+        l1.textContent = c.l1 || '';
+        l2.textContent = c.l2 || '';
+        linesEl.classList.remove('in'); void linesEl.offsetWidth; linesEl.classList.add('in');
+      }
+    };
+
+    function show() { stage.classList.remove('is-hiding','is-visible'); void stage.offsetWidth; stage.classList.add('is-visible'); }
+    function hide() { stage.classList.remove('is-visible'); stage.classList.add('is-hiding'); }
+
+    let lastSeq = null;
+    const applyState = (s) => {
+      if (!s) return;
+      applyConfig(s.config);
+      if (s.seq !== lastSeq) {
+        lastSeq = s.seq;
+        if (s.action === 'show' || (s.action == null && s.visible)) show();
+        else if (s.action === 'hide') hide();
+      }
+    };
+    const readState = () => { try { return JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch (e) { return null; } };
+
+    const params = new URLSearchParams(location.search);
+    const forceShow = params.get('preview') === '1';
+    const init = readState();
+    if (init) { applyConfig(init.config); lastSeq = init.seq; if (forceShow || init.visible) setTimeout(show, 40); }
+    else if (forceShow) setTimeout(show, 40);
+
+    if ('BroadcastChannel' in window) { const ch = new BroadcastChannel(CHANNEL); ch.onmessage = (e) => applyState(e.data); }
+    window.addEventListener('storage', (e) => { if (e.key === STATE_KEY) applyState(readState()); });
+    setInterval(() => applyState(readState()), 300);
+
+    // ---- Pile d'overlays : n'occupe le bas que si positionné en bas ----
+    if (window.OverlayStack && !forceShow) {
+      OverlayStack.registerPublisher('lyrics', () => {
+        if (!stage.classList.contains('is-visible')) return 0;
+        if (stage.getAttribute('data-pos') !== 'bottom') return 0;
+        const r = linesEl.getBoundingClientRect();
+        return Math.max(0, (window.innerHeight - r.top) / window.innerHeight);
+      }, 500);
+    }
+  </script>
+</body>
+</html>

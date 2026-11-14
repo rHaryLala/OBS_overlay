@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UAZ Live — Overlay</title>
+  <style>
+    /* Police Inter embarquée (dossier fonts/) : fonctionne sans internet le jour J */
+    @font-face { font-family:"Inter"; font-weight:400; font-display:swap; src:url("fonts/inter-latin-400-normal.woff2") format("woff2"); }
+    @font-face { font-family:"Inter"; font-weight:600; font-display:swap; src:url("fonts/inter-latin-600-normal.woff2") format("woff2"); }
+    @font-face { font-family:"Inter"; font-weight:700; font-display:swap; src:url("fonts/inter-latin-700-normal.woff2") format("woff2"); }
+    @font-face { font-family:"Inter"; font-weight:800; font-display:swap; src:url("fonts/inter-latin-800-normal.woff2") format("woff2"); }
+    /* URL STATIQUE : dans OBS -> Source Navigateur 1920×1080 -> file:///…/uaz-live.html
+       Piloté par uaz-live-dock.html (localStorage + BroadcastChannel + polling 300 ms). */
+    :root {
+      --navy: #1b2a6b;
+      --accent: #14c3d6;
+      --role: #aab6e6;
+      --name-size: 48px;
+      --role-size: 22px;
+      --ease-out: cubic-bezier(.16, 1, .3, 1);     /* arrivée douce, sans rebond */
+      --ease-in: cubic-bezier(.55, 0, .75, .3);
+    }
+    html, body { width:100%; height:100%; margin:0; overflow:hidden; background:transparent; }
+    body { font-family: "Inter", "Segoe UI Variable Display", "Segoe UI", Arial, sans-serif; color:#fff;
+      -webkit-font-smoothing: antialiased; }
+
+    /* ============ HABILLAGE : logo + EN DIRECT + barre du bas ============ */
+    .brand { position:absolute; left:64px; top:40px; }
+    .brand-box { position:relative; display:flex; align-items:center; gap:20px; height:112px; padding:0 26px 0 13px;
+      background:var(--navy); border-left:5px solid var(--accent); box-sizing:border-box; }
+    .brand-seal { width:78px; height:78px; object-fit:contain; display:block; }
+    .brand-txt { display:flex; flex-direction:column; gap:2px; white-space:nowrap; }
+    .brand-l1 { font-size:13px; font-weight:600; letter-spacing:.2em; color:var(--accent); text-transform:uppercase; }
+    .brand-l2 { font-size:32px; font-weight:700; letter-spacing:-.01em; line-height:1.15; }
+    .brand-line { position:absolute; left:0; bottom:-3px; height:3px; width:calc(100% + 25px); background:var(--accent);
+      transform-origin:left; }
+
+    .live { position:absolute; right:64px; top:48px; display:flex; align-items:center; gap:14px; height:56px; padding:0 46px;
+      background:var(--navy); border:2px solid var(--accent); box-sizing:border-box; }
+    .live-dot { width:12px; height:12px; border-radius:50%; background:var(--accent); }
+    .live-txt { font-size:18px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; }
+
+    .footer { position:absolute; left:0; right:0; bottom:0; height:24px; background:var(--navy); }
+    .footer-tab { position:absolute; left:64px; bottom:0; height:24px; padding:0 16px; display:flex; align-items:center;
+      background:var(--accent); color:var(--navy); font-size:11px; font-weight:700; letter-spacing:.2em; text-transform:uppercase;
+      white-space:nowrap; }
+
+    /* états : caché par défaut */
+    .brand, .live, .footer { opacity:0; }
+    .brand { transform:translateX(-24px); }
+    .brand-line { transform:scaleX(0); }
+    .live { transform:translateX(18px); }
+    .footer { transform:translateY(100%); }
+
+    .frame-on .brand  { opacity:1; transform:none; transition:opacity .7s var(--ease-out), transform .9s var(--ease-out); }
+    .frame-on .brand-line { transform:scaleX(1); transition:transform 1s var(--ease-out) .35s; }
+    .frame-on .live   { opacity:1; transform:none; transition:opacity .7s var(--ease-out) .15s, transform .9s var(--ease-out) .15s; }
+    .frame-on .footer { opacity:1; transform:none; transition:opacity .6s var(--ease-out) .25s, transform .8s var(--ease-out) .25s; }
+    .frame-off .brand, .frame-off .live, .frame-off .footer { transition:opacity .4s var(--ease-in), transform .45s var(--ease-in); }
+
+    /* point « en direct » : respiration lente et discrète (désactivable) */
+    .frame-on .live-dot { animation:breathe 2.6s ease-in-out infinite; }
+    .no-pulse .live-dot { animation:none !important; }
+    @keyframes breathe { 0%,100% { opacity:1; box-shadow:0 0 0 0 rgba(20,195,214,.0); }
+                         50% { opacity:.45; box-shadow:0 0 0 4px rgba(20,195,214,.18); } }
+
+    .hide-brand .brand, .hide-live .live, .hide-footer .footer { display:none; }
+
+    /* ============ BANDEAU INTERVENANT ============ */
+    .card { position:absolute; left:64px; bottom:64px; width:var(--card-w, 1120px); box-sizing:border-box;
+      padding:28px 72px 34px 44px; background:var(--navy); }
+    .card-bar { position:absolute; left:0; top:0; bottom:0; width:8px; background:var(--accent); transform-origin:bottom; }
+    .card-label { display:flex; align-items:center; gap:10px; font-size:13px; font-weight:600; letter-spacing:.25em;
+      color:var(--accent); text-transform:uppercase; }
+    .card-label::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--accent); }
+    .card-label:empty { display:none; }
+    .card-name { font-size:var(--name-size); font-weight:700; letter-spacing:-.01em; line-height:1.1; margin-top:10px;
+      white-space:nowrap; }
+    .card-role { font-size:var(--role-size); font-weight:400; color:var(--role); margin-top:10px; white-space:nowrap; }
+    .card-role:empty { display:none; }
+    .card-txt { transition:opacity .25s ease; }
+    .card-txt.swap { opacity:0; transition:opacity .15s ease; }
+
+    /* caché : fond replié depuis la gauche (clip-path, aucun mouvement brusque) */
+    .card { clip-path:inset(0 100% 0 0); }
+    .card-bar { transform:scaleY(0); }
+    .card .line { opacity:0; transform:translateY(10px); }
+
+    .card.on { clip-path:inset(0 0 0 0); transition:clip-path .75s var(--ease-out) .12s; }
+    .card.on .card-bar { transform:scaleY(1); transition:transform .45s var(--ease-out); }
+    .card.on .line { opacity:1; transform:none; transition:opacity .55s var(--ease-out), transform .7s var(--ease-out); }
+    .card.on .card-label { transition-delay:.45s; }
+    .card.on .card-name  { transition-delay:.52s; }
+    .card.on .card-role  { transition-delay:.6s; }
+    /* SORTIE en 3 temps (~0,95 s) :
+       1) le texte part ligne par ligne (glisse vers le haut + fondu)
+       2) un rideau cyan balaie le bandeau de gauche à droite et le recouvre
+       3) le fond disparaît sous le rideau, qui se retire vers la droite : il ne reste rien */
+    .card-wipe { position:absolute; inset:0; background:var(--accent); clip-path:inset(0 100% 0 0); pointer-events:none; z-index:2; }
+    .card.off { clip-path:inset(0 0 0 0); animation:outBg .75s linear .2s both; }
+    .card.off .card-bar { transform:scaleY(1); animation:outBar .75s linear .2s both; }
+    .card.off .card-wipe { animation:outWipe .75s cubic-bezier(.65,0,.35,1) .2s both; }
+    .card.off .line { animation:outLine .32s var(--ease-in) both; }
+    .card.off .card-label { animation-delay:0s; }
+    .card.off .card-name  { animation-delay:.05s; }
+    .card.off .card-role  { animation-delay:.1s; }
+    @keyframes outLine { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(-10px); } }
+    @keyframes outWipe { 0% { clip-path:inset(0 100% 0 0); } 45%, 55% { clip-path:inset(0 0 0 0); } 100% { clip-path:inset(0 0 0 100%); } }
+    /* le fond et la barre s'éteignent pile quand le rideau les recouvre (invisible à l'écran) */
+    @keyframes outBg { 0%, 49% { background-color:var(--navy); } 50%, 100% { background-color:transparent; } }
+    @keyframes outBar { 0%, 49% { opacity:1; } 50%, 100% { opacity:0; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration:.01ms !important; animation:none !important; }
+      .card.off { visibility:hidden; }
+    }
+    /* chargement / changement de scène : réapparition instantanée, sans rejouer l'animation */
+    .instant *, .instant { transition:none !important; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="brand" id="brand">
+      <div class="brand-box">
+        <img class="brand-seal" id="seal" src="UAZ%20Official.png" alt="">
+        <div class="brand-txt">
+          <div class="brand-l1" id="brandL1">Université Adventiste</div>
+          <div class="brand-l2" id="brandL2">Zurcher</div>
+        </div>
+        <span class="brand-line"></span>
+      </div>
+    </div>
+
+    <div class="live" id="live"><span class="live-dot"></span><span class="live-txt" id="liveTxt">En direct</span></div>
+
+    <div class="footer" id="footer"><div class="footer-tab" id="footerTxt">Université Adventiste Zurcher</div></div>
+
+    <div class="card" id="card">
+      <span class="card-bar"></span>
+      <span class="card-wipe"></span>
+      <div class="card-txt" id="cardTxt">
+        <div class="line card-label" id="label">Intervenant · Live</div>
+        <div class="line card-name" id="name">[Nom de l'intervenant]</div>
+        <div class="line card-role" id="role">[Fonction / département]</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="overlay-stack.js"></script>
+  <script>
+    const CHANNEL='uaz-live', STATE_KEY='uaz-live-state';
+    const root=document.documentElement, body=document.body;
+    const $=id=>document.getElementById(id);
+    const card=$('card'), cardTxt=$('cardTxt'), nameEl=$('name');
+    const VARS={ navy:'--navy', accent:'--accent', roleColor:'--role', nameSize:'--name-size', roleSize:'--role-size', cardWidth:'--card-w' };
+    const params=new URLSearchParams(location.search), isPreview=params.get('preview')==='1';
+
+    // le nom reste sur une ligne : la police se réduit juste assez s'il est trop long
+    const fitName = () => {
+      nameEl.style.fontSize='';
+      let size=parseFloat(getComputedStyle(nameEl).fontSize)||48, g=0;
+      const max=card.clientWidth-44-72;
+      while (nameEl.scrollWidth>max && size>24 && g<80) { size-=1; nameEl.style.fontSize=size+'px'; g++; }
+    };
+
+    let lastText='';
+    const applyConfig = c => {
+      if (!c) return;
+      for (const [k,v] of Object.entries(VARS)) if (c[k]!=null && c[k]!=='') root.style.setProperty(v, c[k]);
+      $('brandL1').textContent = c.brandL1 ?? 'Université Adventiste';
+      $('brandL2').textContent = c.brandL2 ?? 'Zurcher';
+      $('liveTxt').textContent = c.liveText ?? 'En direct';
+      $('footerTxt').textContent = c.footerText ?? 'Université Adventiste Zurcher';
+      body.classList.toggle('hide-brand', c.showBrand===false);
+      body.classList.toggle('hide-live', c.showLive===false);
+      body.classList.toggle('hide-footer', c.showFooter===false);
+      body.classList.toggle('no-pulse', c.pulse===false);
+      const t=[c.label,c.name,c.role].join('\u0001');
+      if (t!==lastText) {
+        const first = lastText==='';
+        lastText=t;
+        const write=()=>{ $('label').textContent=c.label||''; nameEl.textContent=c.name||''; $('role').textContent=c.role||''; fitName(); };
+        // déjà à l'écran : fondu enchaîné du texte, sans rejouer toute l'entrée
+        if (!first && card.classList.contains('on')) { cardTxt.classList.add('swap'); setTimeout(()=>{ write(); cardTxt.classList.remove('swap'); }, 160); }
+        else write();
+      }
+    };
+
+    const setFrame = (on, instant) => {
+      if (instant) body.classList.add('instant');
+      body.classList.toggle('frame-on', on); body.classList.toggle('frame-off', !on);
+      if (instant) requestAnimationFrame(()=>requestAnimationFrame(()=>body.classList.remove('instant')));
+    };
+    const setCard = on => {
+      if (on && card.classList.contains('on')) return;   // déjà à l'écran : le texte change en fondu (applyConfig)
+      if (!on && !card.classList.contains('on')) return;
+      card.classList.remove('on','off'); void card.offsetWidth;
+      card.classList.add(on?'on':'off');
+    };
+
+    let lastFrameSeq=null, lastCardSeq=null;
+    const applyState = s => {
+      if (!s) return;
+      applyConfig(s.config);
+      if (s.frameSeq!==lastFrameSeq) { lastFrameSeq=s.frameSeq; setFrame(!!s.frame, false); }
+      if (s.cardSeq!==lastCardSeq) { lastCardSeq=s.cardSeq; setCard(!!s.card); }
+    };
+    const readState = () => { try { return JSON.parse(localStorage.getItem(STATE_KEY)||'null'); } catch(e) { return null; } };
+
+    // ---- démarrage ----
+    // Habillage : restauré tel quel, instantanément (pas de « pop » à chaque changement de scène OBS).
+    // Bandeau : reste masqué au rechargement ; il n'apparaît que sur un NOUVEL « Afficher » du dock.
+    const init=readState();
+    if (init) { applyConfig(init.config); lastFrameSeq=init.frameSeq; lastCardSeq=init.cardSeq; setFrame(!!init.frame || isPreview, true); }
+    else setFrame(isPreview, true);
+    if (isPreview && init && init.card) setCard(true);
+    document.fonts && document.fonts.ready.then(fitName);
+
+    // signal de présence pour le voyant « Overlay OBS connecté » du dock (pas pour l'aperçu du dock)
+    if (!isPreview) { const ping=()=>{ try { localStorage.setItem('uaz-live-ping', String(Date.now())); } catch(e){} }; ping(); setInterval(ping, 2000); }
+
+    if ('BroadcastChannel' in window) { const ch=new BroadcastChannel(CHANNEL); ch.onmessage=e=>applyState(e.data); }
+    window.addEventListener('storage', e=>{ if (e.key===STATE_KEY) applyState(readState()); });
+    setInterval(()=>applyState(readState()), 300);
+
+    // ---- pile d'overlays : le chat se place au-dessus du bandeau et de la barre du bas ----
+    if (window.OverlayStack && !isPreview) {
+      OverlayStack.registerPublisher('uaz-live', () => {
+        const h=window.innerHeight; let occ=0;
+        if (card.classList.contains('on')) occ=Math.max(occ, h-card.getBoundingClientRect().top);
+        if (body.classList.contains('frame-on') && !body.classList.contains('hide-footer')) occ=Math.max(occ, 24);
+        return occ/h;
+      }, 500);
+    }
+  </script>
+</body>
+</html>

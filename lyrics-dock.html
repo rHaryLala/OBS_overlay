@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paroles — Régie</title>
+  <link rel="stylesheet" href="dock-ui.css">
+  <style>
+    .preview-frame { position:relative; overflow:hidden; }
+    #preview { position:absolute; top:0; left:0; width:1920px; height:1080px; transform-origin:top left; border:0; }
+    .chk { display:flex; align-items:center; gap:9px; font-size:13.5px; color:hsl(var(--foreground)); cursor:pointer; padding:4px 0; }
+    .chk input { width:18px; height:18px; accent-color:hsl(var(--brand)); }
+    .now { border:1px solid hsl(var(--border)); border-radius:calc(var(--radius) - .2rem); padding:12px 14px; background:hsl(var(--muted)); }
+    .now .nl { font-weight:650; font-size:14.5px; line-height:1.4; }
+    .now .nl.empty { color:hsl(var(--muted-foreground)); font-weight:400; font-style:italic; }
+    .now .nh { font-size:11.5px; letter-spacing:.1em; text-transform:uppercase; color:hsl(var(--brand)); font-weight:700; margin-bottom:5px; }
+    .blocks { display:grid; gap:4px; max-height:300px; overflow-y:auto; padding:2px; }
+    .blk { display:grid; grid-template-columns:30px 1fr; gap:9px; align-items:start; text-align:left;
+      padding:8px 10px; border:1px solid transparent; border-radius:calc(var(--radius) - .2rem);
+      background:transparent; color:inherit; font:inherit; cursor:pointer; width:100%; touch-action:manipulation; }
+    .blk:hover { background:hsl(var(--accent)); }
+    .blk .i { color:hsl(var(--muted-foreground)); font-size:11.5px; font-variant-numeric:tabular-nums; text-align:right; }
+    .blk .lb { font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:hsl(var(--brand)); font-weight:700; }
+    .blk .tx { font-size:12.5px; line-height:1.35; }
+    .blk.cur { background:hsl(var(--brand)/.14); border-color:hsl(var(--brand)/.4); }
+    .blk.cur .i { color:hsl(var(--brand)); font-weight:700; }
+    .colrow { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end; }
+    .mini { font-size:12px; color:hsl(var(--muted-foreground)); }
+    .hidden { display:none !important; }
+
+    /* ---- Recherche de chant : champ + bouton effacer ---- */
+    .search-wrap { position:relative; }
+    .search-wrap .input { padding-right:34px; }
+    .clearBtn { position:absolute; right:6px; top:50%; transform:translateY(-50%);
+      width:24px; height:24px; border-radius:50%; border:0; background:hsl(var(--muted));
+      color:hsl(var(--muted-foreground)); cursor:pointer; font-size:12px; line-height:1;
+      display:flex; align-items:center; justify-content:center; padding:0; }
+    .clearBtn:hover { background:hsl(var(--accent)); color:hsl(var(--foreground)); }
+
+    /* ---- Résultats de recherche : liste cliquable (plus de <select> capricieux) ---- */
+    .results { display:grid; gap:5px; max-height:280px; overflow-y:auto; padding:2px; margin:2px 0 4px; }
+    .res { display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center; text-align:left;
+      padding:9px 10px; border:1px solid hsl(var(--border)); border-radius:calc(var(--radius) - .2rem);
+      background:hsl(var(--card)); color:inherit; font:inherit; cursor:pointer; width:100%; touch-action:manipulation; }
+    .res:hover { border-color:hsl(var(--brand)/.5); background:hsl(var(--accent)); }
+    .res.hl { box-shadow:0 0 0 2px hsl(var(--brand)/.35); }
+    .res.cur { background:hsl(var(--brand)/.14); border-color:hsl(var(--brand)/.55); }
+    .res .num { font-weight:800; font-size:12px; color:hsl(var(--brand)); background:hsl(var(--brand)/.12);
+      border-radius:6px; padding:4px 8px; min-width:28px; text-align:center; font-variant-numeric:tabular-nums; }
+    .res .num.dim { color:hsl(var(--muted-foreground)); background:hsl(var(--muted)); opacity:.7; }
+    .res .coll { font-size:10px; color:hsl(var(--muted-foreground)); font-weight:700; text-transform:uppercase;
+      letter-spacing:.06em; margin-bottom:2px; }
+    .res .ttl { font-weight:650; font-size:13.5px; line-height:1.3; }
+    .res .snip { font-size:11.5px; color:hsl(var(--muted-foreground)); margin-top:3px; line-height:1.3; }
+    .res .arrow { color:hsl(var(--muted-foreground)); font-size:12px; opacity:.55; }
+    .res.cur .arrow { color:hsl(var(--brand)); opacity:1; }
+
+    /* ---- Collections : chips cliquables (plus de <select>) ---- */
+    .coll-chips { display:flex; flex-wrap:wrap; gap:7px; }
+    .chip { display:inline-flex; align-items:center; gap:6px; padding:7px 13px; border-radius:999px;
+      border:1px solid hsl(var(--border)); background:hsl(var(--card)); color:hsl(var(--foreground));
+      font-size:12.5px; font-weight:650; cursor:pointer; white-space:nowrap; font-family:inherit; touch-action:manipulation; }
+    .chip:hover { border-color:hsl(var(--brand)/.5); background:hsl(var(--accent)); }
+    .chip.active { background:hsl(var(--brand)); border-color:hsl(var(--brand)); color:#1a1206; font-weight:700; }
+    .chip .cnt { opacity:.7; font-weight:500; font-variant-numeric:tabular-nums; }
+    .chip.active .cnt { opacity:.85; }
+
+    .mobile-tabs { display:none; }
+    @media (max-width:880px) {
+      body { padding:0; }
+      .mobile-app { display:flex; flex-direction:column; height:100dvh; }
+      .page-header { padding:10px 14px; margin:0; gap:8px; border-bottom:1px solid hsl(var(--border)); }
+      .page-header h1 { font-size:16px; } .page-header .desc { display:none; }
+      .app-grid { flex:1; min-height:0; display:block; position:relative; gap:0; }
+      .app-grid > .col { display:contents; }
+      .panel { position:absolute; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:12px; display:none; }
+      .panel.active { display:block; }
+      .card { box-shadow:none; border-radius:12px; }
+      /* Direct : le panneau défile normalement. (L'ancien « tout tenir dans l'écran » écrasait
+         la liste des écrans à 0 px dès que la liste de résultats était présente.) */
+      .results { max-height:min(34vh, 300px); }
+      .blocks { max-height:min(46vh, 420px); }
+      .mobile-tabs { display:grid; grid-template-columns:repeat(4,1fr); background:hsl(var(--card)); border-top:1px solid hsl(var(--border)); padding-bottom:env(safe-area-inset-bottom,0); }
+      .mobile-tabs button { display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 4px; background:none; border:0; cursor:pointer; color:hsl(var(--muted-foreground)); font:inherit; font-size:17px; line-height:1; }
+      .mobile-tabs button span { font-size:10.5px; font-weight:500; }
+      .mobile-tabs button.active { color:hsl(var(--brand)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container mobile-app">
+    <div class="page-header">
+      <h1>🎵 Paroles</h1>
+      <span class="desc" id="srcInfo">Collections de chants</span>
+      <span class="badge badge-off" id="onair" style="margin-left:auto">● Hors antenne</span>
+    </div>
+
+    <div class="app-grid">
+      <div class="col">
+        <section class="panel active" data-panel="direct">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">▶ Direct</div>
+            <div class="card-description"><kbd>←</kbd> <kbd>→</kbd> défiler · <kbd>Échap</kbd> masquer · 2 lignes max par écran</div>
+          </div>
+          <div class="card-content">
+            <div class="field">
+              <label class="label">Collection</label>
+              <div class="coll-chips" id="collChips"></div>
+            </div>
+            <div class="field">
+              <label class="label" for="songSearch">Chant <span class="hint" id="songCount"></span></label>
+              <div class="search-wrap">
+                <input class="input" id="songSearch" type="text" placeholder="Numéro, titre, ou une phrase des paroles…" autocomplete="off">
+                <button type="button" class="clearBtn hidden" id="searchClearBtn" title="Effacer la recherche" aria-label="Effacer">✕</button>
+              </div>
+              <div class="row wrap" style="gap:14px; margin:8px 0 6px">
+                <label class="chk"><input type="checkbox" id="searchLyrics" checked> Chercher dans les paroles</label>
+                <label class="chk"><input type="checkbox" id="searchAll"> Toutes les collections</label>
+              </div>
+              <div class="results" id="songResults"></div>
+              <div class="hint text-xs" style="margin-top:-2px">👆 Clique un chant pour l'afficher · <kbd>↑</kbd><kbd>↓</kbd> naviguer · <kbd>Entrée</kbd> afficher</div>
+            </div>
+
+            <div class="now">
+              <div class="row between" style="align-items:center">
+                <div class="nh" id="nowHead">—</div>
+                <span class="badge badge-live hidden" id="nowLive" style="font-size:10px; flex:0 0 auto">● À l'antenne</span>
+              </div>
+              <div class="nl" id="now1">—</div>
+              <div class="nl" id="now2"></div>
+            </div>
+
+            <div class="row between">
+              <span class="badge badge-secondary tabnum" id="counter">0 / 0</span>
+              <span class="muted text-xs" id="blkLabel"></span>
+            </div>
+
+            <div class="btn-row">
+              <button class="btn btn-outline" id="prevBtn">◀ Précédent</button>
+              <button class="btn btn-brand" id="nextBtn">Suivant ▶</button>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" id="showBtn">Afficher</button>
+              <button class="btn btn-secondary" id="hideBtn">Masquer</button>
+            </div>
+
+            <hr class="separator">
+            <div class="field blocks-field" id="blocksField">
+              <div class="row between" style="align-items:center; margin-bottom:6px">
+                <div class="label" style="margin:0">Écrans du chant</div>
+                <button class="btn btn-outline btn-sm" id="editBtn">✏️ Corriger</button>
+              </div>
+              <div class="blocks" id="blocks"></div>
+            </div>
+
+            <div class="field hidden" id="editForm">
+              <div class="grid-2">
+                <div class="field"><label class="label" for="editNum">Numéro <span class="hint">optionnel</span></label>
+                  <input class="input" id="editNum" type="text" placeholder="ex. 123"></div>
+                <div class="field"><label class="label" for="editTitle">Titre</label>
+                  <input class="input" id="editTitle" type="text" placeholder="Titre du chant"></div>
+              </div>
+              <div class="field">
+                <label class="label" for="editLyrics">Paroles <span class="hint">1 écran par bloc · ligne vide entre les blocs · <code>[crochets]</code> = repère facultatif</span></label>
+                <textarea class="input" id="editLyrics" spellcheck="true" style="min-height:200px"></textarea>
+              </div>
+              <div class="btn-row">
+                <button class="btn btn-brand btn-sm" id="saveEditBtn">💾 Enregistrer</button>
+                <button class="btn btn-ghost btn-sm" id="cancelEditBtn">Annuler</button>
+              </div>
+            </div>
+            <div class="status" id="status"></div>
+          </div>
+        </div>
+        </section>
+
+        <section class="panel" data-panel="library">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📚 Collections</div>
+            <div class="card-description">Crée des collections (Hymnes et Louanges, SDA Hymnal, Fihirana Adventiste…) et importe des chants dedans.</div>
+          </div>
+          <div class="card-content">
+            <div class="field">
+              <label class="label">Collection active</label>
+              <div class="coll-chips" id="collChips2"></div>
+              <div class="row" style="margin-top:8px">
+                <button class="btn btn-secondary btn-sm" id="newCollBtn">+ Nouvelle collection</button>
+              </div>
+              <div class="mini" id="collInfo">—</div>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-outline btn-sm" id="renameCollBtn">✏️ Renommer</button>
+              <button class="btn btn-ghost btn-sm" id="deleteCollBtn">🗑️ Supprimer</button>
+            </div>
+
+            <hr class="separator">
+            <div class="label">Importer dans cette collection</div>
+            <div class="btn-row">
+              <input type="file" id="jsonInput" accept=".json,application/json" style="display:none">
+              <input type="file" id="txtInput" accept=".txt,text/plain" style="display:none">
+              <button class="btn btn-brand btn-sm" id="jsonBtn">📄 Importer un .json</button>
+              <button class="btn btn-secondary btn-sm" id="txtBtn">📁 Importer un .txt</button>
+            </div>
+            <div class="status show" id="importInfo" style="opacity:1">Aucun import récent.</div>
+
+            <hr class="separator">
+            <div class="label">🌐 Bibliothèque en ligne <span class="hint">hymnal.rindra.org — 4 485 chants</span></div>
+            <div class="btn-row">
+              <button class="btn btn-secondary btn-sm" id="apiLoadBtn">Charger les collections</button>
+            </div>
+            <div class="field">
+              <select class="input" id="apiCollSel"><option value="">— clique sur « Charger les collections » —</option></select>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-brand btn-sm" id="apiImportBtn">⬇️ Importer avec les paroles</button>
+              <button class="btn btn-ghost btn-sm hidden" id="apiCancelBtn">Annuler</button>
+            </div>
+            <div class="status show" id="apiInfo" style="opacity:1">Import hors ligne ensuite : tout est enregistré sur ta machine.</div>
+
+            <hr class="separator">
+            <div class="field">
+              <label class="label" for="rawInput">…ou coller des chants <span class="hint"># Titre puis les paroles, ligne vide entre strophes</span></label>
+              <textarea class="input" id="rawInput" spellcheck="false" style="min-height:170px" placeholder="# Sur le chemin de la vie
+Sur le chemin de la vie
+Jésus est mon guide fidèle
+
+Il ne m'abandonne jamais
+Sa main me conduit"></textarea>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-secondary btn-sm" id="addPastedBtn">➕ Ajouter à la collection</button>
+              <button class="btn btn-ghost btn-sm" id="emptyCollBtn">Vider la collection</button>
+            </div>
+          </div>
+        </div>
+        </section>
+      </div>
+
+      <div class="col">
+        <section class="panel" data-panel="preview">
+        <div class="card">
+          <div class="card-header"><div class="card-title">👁️ Aperçu</div></div>
+          <div class="card-content"><div class="preview-frame"><iframe id="preview" title="Aperçu paroles"></iframe></div></div>
+        </div>
+        </section>
+
+        <section class="panel" data-panel="style">
+        <div class="card">
+          <div class="card-header"><div class="card-title">🎨 Style</div></div>
+          <div class="card-content">
+            <div class="field">
+              <label class="label" for="position">Position</label>
+              <select class="input" id="position">
+                <option value="bottom">En bas</option><option value="center">Centré</option><option value="top">En haut</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="label" for="bgMode">Fond</label>
+              <select class="input" id="bgMode">
+                <option value="gradient">Dégradé transparent (recommandé)</option>
+                <option value="band">Bandeau plein</option>
+                <option value="none">Aucun (texte seul)</option>
+              </select>
+            </div>
+            <div class="grid-3">
+              <div class="field"><label class="label" for="accent">Accent</label><input class="color" id="accent" type="color" value="#b08d4f"></div>
+              <div class="field"><label class="label" for="bg1">Fond haut</label><input class="color" id="bg1" type="color" value="#060e26"></div>
+              <div class="field"><label class="label" for="bg2">Fond bas</label><input class="color" id="bg2" type="color" value="#04091a"></div>
+            </div>
+            <div class="field">
+              <label class="label" for="bgOpacity">Opacité du fond <span class="hint tabnum" id="bgOpacityVal">88 %</span></label>
+              <input id="bgOpacity" type="range" min="0" max="100" value="88" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="textSize">Taille des paroles <span class="hint tabnum" id="textSizeVal">46 px</span></label>
+              <input id="textSize" type="range" min="24" max="90" value="46" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="titleSize">Taille du titre <span class="hint tabnum" id="titleSizeVal">20 px</span></label>
+              <input id="titleSize" type="range" min="10" max="40" value="20" style="width:100%">
+            </div>
+            <hr class="separator">
+            <label class="chk"><input type="checkbox" id="showTitle" checked> Afficher le titre du chant</label>
+            <label class="chk"><input type="checkbox" id="showNumber" checked> Inclure le numéro du chant</label>
+          </div>
+          <div class="card-footer">
+            <button class="btn btn-outline btn-sm" id="copyBtn">📋 Copier l'URL overlay</button>
+            <button class="btn btn-ghost btn-sm" id="resetBtn">↺ Réinitialiser le style</button>
+          </div>
+        </div>
+        </section>
+      </div>
+    </div>
+
+    <nav class="mobile-tabs">
+      <button data-target="direct" class="active">▶<span>Direct</span></button>
+      <button data-target="library">📚<span>Collections</span></button>
+      <button data-target="style">🎨<span>Style</span></button>
+      <button data-target="preview">👁️<span>Aperçu</span></button>
+    </nav>
+  </div>
+
+  <script>
+    const CHANNEL='lyrics', STATE_KEY='lyrics-state', DOCK_KEY='lyrics-dock';
+    const channel = ('BroadcastChannel' in window) ? new BroadcastChannel(CHANNEL) : null;
+    const $ = id => document.getElementById(id);
+    const preview=$('preview'), statusEl=$('status'), onair=$('onair');
+
+    // exclusivité mutuelle
+    const SOLO_KEY='overlay-solo', MY_ID='lyrics';
+    const soloCh = ('BroadcastChannel' in window) ? new BroadcastChannel(SOLO_KEY) : null;
+    const announceSolo = () => { const m={owner:MY_ID,ts:Date.now()}; try { localStorage.setItem(SOLO_KEY,JSON.stringify(m)); } catch(_){} if(soloCh) soloCh.postMessage(m); };
+    const onSolo = m => { if (m && m.owner && m.owner!==MY_ID && visible) hideOverlay(); };
+    if (soloCh) soloCh.onmessage = e => onSolo(e.data);
+    window.addEventListener('storage', e => { if (e.key===SOLO_KEY && e.newValue) { try{ onSolo(JSON.parse(e.newValue)); }catch(_){} } });
+
+    const styleText=['position','bgMode','accent','bg1','bg2','bgOpacity','textSize','titleSize'];
+    const styleCheck=['showTitle','showNumber'];
+    const sizeFields=['textSize','titleSize'];
+
+    // ---------- état ----------
+    // collections : [{ id, name, songs:[{number,title,blocks:[{lines:[],label}]}] }]
+    let collections=[], ci=0, si=0, bi=0, visible=false, seq=0;
+    let results=[];    // résultats de recherche : [{ci, si, bi, snippet}]
+
+    const folderUrl = () => { const p=location.pathname; return 'file:///'+p.substring(0,p.lastIndexOf('/')+1).replace(/\\/g,'/'); };
+    const baseUrl = folderUrl()+'lyrics-overlay.html';
+
+    // ---------- IndexedDB (les collections peuvent être volumineuses) ----------
+    const DBN='lyrics-dock-db', STORE='kv';
+    const idb = () => new Promise((res,rej)=>{ try{ const r=indexedDB.open(DBN,1);
+      r.onupgradeneeded=()=>r.result.createObjectStore(STORE);
+      r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);}catch(e){rej(e);} });
+    const idbSet = async (k,v) => { const d=await idb(); return new Promise((res,rej)=>{ const t=d.transaction(STORE,'readwrite'); t.objectStore(STORE).put(v,k); t.oncomplete=()=>res(true); t.onerror=()=>rej(t.error); }); };
+    const idbGet = async k => { const d=await idb(); return new Promise((res,rej)=>{ const t=d.transaction(STORE,'readonly'); const q=t.objectStore(STORE).get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); };
+    const saveCollections = async () => { try { await idbSet('collections', collections); } catch(e) { toast('⚠️ Sauvegarde impossible (à réimporter au prochain lancement).'); } };
+
+    const noAcc = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+    const escapeHtml = s => (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const uid = () => 'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+
+    // ---------- tap fiable sur mobile ----------
+    // Un simple 'click' peut "rater" sur téléphone : le clavier virtuel qui se ferme (focus perdu sur le
+    // champ de recherche) ou un reste de défilement déplacent/« avalent » le clic avant qu'il n'arrive.
+    // On capture nous-mêmes le geste (pointerdown -> pointerup) avec setPointerCapture : l'élément visé
+    // reste celui pressé au départ, même si la mise en page bouge entre-temps ; un vrai glissé (scroll)
+    // au-delà de 10px est ignoré pour ne pas gêner le défilement tactile de la liste.
+    // Fait défiler UNIQUEMENT la liste pour rendre l'élément visible (scrollIntoView ferait aussi
+    // défiler tout le panneau : l'écran sautait sous le doigt à chaque clic).
+    const keepVisible = (box, el) => {
+      if (!box || !el) return;
+      const b=box.getBoundingClientRect(), r=el.getBoundingClientRect();
+      if (r.top < b.top) box.scrollTop -= (b.top - r.top);
+      else if (r.bottom > b.bottom) box.scrollTop += (r.bottom - b.bottom);
+    };
+    const HAS_POINTER = 'PointerEvent' in window;
+    const onTap = (el, cb) => {
+      if (!HAS_POINTER) { el.addEventListener('click', cb); return; }
+      let sx=0, sy=0, st=0, down=false;
+      el.addEventListener('pointerdown', e => {
+        sx=e.clientX; sy=e.clientY; st=Date.now(); down=true;
+        try { el.setPointerCapture(e.pointerId); } catch(_){}
+      });
+      el.addEventListener('pointerup', e => {
+        if (!down) return; down=false;
+        const dx=Math.abs(e.clientX-sx), dy=Math.abs(e.clientY-sy), dt=Date.now()-st;
+        if (dx<10 && dy<10 && dt<1500) cb(e);
+      });
+      el.addEventListener('pointercancel', () => { down=false; });
+    };
+
+    // ---------- conversion des formats ----------
+    const labelFor = k => {
+      k = String(k ?? '').trim();
+      if (!k) return '';
+      if (/^\d+$/.test(k)) return 'Couplet '+k;
+      const n = noAcc(k);
+      if (n==='refrain' || n==='ref' || n==='ref.' || n==='chorus' || n==='ch' || n==='fiverenana') return 'Refrain';
+      if (n.startsWith('choeur')) return 'Chœur '+(k.split('_')[1]||'').trim();
+      if (n==='fin' || n==='end') return 'Final';
+      if (n==='pont' || n==='bridge') return 'Pont';
+      return k;
+    };
+    const linesToBlocks = (lines, label) => {
+      const L = lines.map(s=>String(s).trim()).filter(Boolean), out=[];
+      for (let i=0;i<L.length;i+=2) out.push({ lines:L.slice(i,i+2), label });
+      return out;
+    };
+
+    // ---------- ordre de chant : couplet 1, refrain, couplet 2, refrain… ----------
+    // Les recueils n'écrivent souvent le refrain qu'une fois (après le couplet 1) : on le répète
+    // après chaque couplet. Ordre d'origine conservé si les refrains diffèrent entre eux ou si le
+    // chant contient d'autres sections (pont, final…), pour ne rien inventer.
+    const isRefrainLabel = l => { const n=noAcc(l); return n==='refrain'||n==='ref'||n==='ref.'||n==='chorus'||n==='ch'||n==='fiverenana'; };
+    const isVerseLabel = l => /^(\d+|couplet\s*\d*|strophe\s*\d*|verse\s*\d*|andininy\s*\d*)$/.test(noAcc(l));
+    const toSections = blocks => {
+      const out=[];
+      blocks.forEach(b=>{ const last=out[out.length-1];
+        if (last && last.label===(b.label||'')) last.blocks.push(b); else out.push({ label:b.label||'', blocks:[b] }); });
+      return out;
+    };
+    const arrangeBlocks = blocks => {
+      const secs=toSections(blocks||[]);
+      const refs=secs.filter(s=>isRefrainLabel(s.label)), verses=secs.filter(s=>isVerseLabel(s.label));
+      if (!refs.length || !verses.length || refs.length+verses.length!==secs.length) return blocks;
+      const key=s=>noAcc(s.blocks.map(b=>b.lines.join(' ')).join(' '));
+      if (new Set(refs.map(key)).size>1) return blocks;
+      const out=[];
+      verses.forEach(v=>{ out.push(...v.blocks, ...refs[0].blocks.map(b=>({ lines:[...b.lines], label:'Refrain' }))); });
+      return out;
+    };
+    // format « hymns.json » : { title, number, slides:[...], "1":[...], refrain:[...] }
+    const isHymnBook = j => Array.isArray(j) && j.length && j[0] && typeof j[0]==='object'
+      && ('title' in j[0]) && (Array.isArray(j[0].slides)||Array.isArray(j[0].parts));
+    const parseHymnBook = arr => arr.map(h => {
+      const order = (Array.isArray(h.slides)&&h.slides.length) ? h.slides
+                  : (Array.isArray(h.parts)&&h.parts.length) ? h.parts
+                  : Object.keys(h).filter(k=>Array.isArray(h[k]));
+      const blocks=[];
+      order.forEach(k => { if (Array.isArray(h[k])) blocks.push(...linesToBlocks(h[k], labelFor(k))); });
+      return { number: h.number ?? null, title: h.title || (h.number?('Cantique '+h.number):'Sans titre'), blocks };
+    }).filter(s=>s.blocks.length);
+    // texte « # Titre » + strophes
+    const parseTextSongs = text => {
+      const out=[]; let cur=null, stanza=[], sIdx=0;
+      const flush=()=>{ if(!stanza.length) return; if(!cur){cur={number:null,title:'Chant',blocks:[]};out.push(cur);} sIdx++; cur.blocks.push(...linesToBlocks(stanza,'Strophe '+sIdx)); stanza=[]; };
+      text.split('\n').forEach(raw=>{ const l=raw.trim();
+        if (l.startsWith('#')) { flush(); sIdx=0; cur={number:null,title:l.replace(/^#+\s*/,'')||'Chant',blocks:[]}; out.push(cur); return; }
+        if (!l) { flush(); return; }
+        if (!cur) { cur={number:null,title:'Chant',blocks:[]}; out.push(cur); }
+        stanza.push(l); });
+      flush();
+      return out.filter(s=>s.blocks.length);
+    };
+    // liste simple [{title, lyrics|text}]
+    const parseSimpleList = arr => arr.map(o => {
+      if (typeof o === 'string') return null;
+      const title = o.title || o.name || o.titre || '';
+      const body = o.lyrics || o.text || o.paroles || '';
+      if (!title && !body) return null;
+      const blocks=[]; let i=0;
+      String(body).split(/\n\s*\n/).forEach(st => { i++; blocks.push(...linesToBlocks(st.split('\n'), 'Strophe '+i)); });
+      return { number: o.number ?? null, title: title||'Chant', blocks };
+    }).filter(s=>s && s.blocks.length);
+
+    // ---------- édition d'un chant (titre + paroles) ----------
+    // chant -> texte éditable : blocs regroupés par repère, séparés par une ligne vide
+    const songToText = s => {
+      const paras=[]; let lab=null, lines=[];
+      const flush=()=>{ if(lines.length) paras.push((lab?('['+lab+']\n'):'')+lines.join('\n')); lines=[]; };
+      (s.blocks||[]).forEach(b=>{
+        const bl=(b.lines||[]).filter(x=>x!=null && String(x).trim()!=='');
+        if((b.label||'')!==(lab||'')){ flush(); lab=b.label||''; }
+        lines.push(...bl);
+      });
+      flush();
+      return paras.join('\n\n');
+    };
+    // texte éditable -> blocs (2 lignes max par écran, comme à l'import)
+    const textToBlocks = text => {
+      const blocks=[];
+      String(text).split(/\n\s*\n/).forEach(para=>{
+        let ls=para.split('\n').map(x=>x.replace(/\s+$/,'')).filter(x=>x.trim()!=='');
+        if(!ls.length) return;
+        let label=''; const m=ls[0].match(/^\s*\[(.+)\]\s*$/);
+        if(m){ label=m[1].trim(); ls=ls.slice(1); }
+        ls=ls.map(x=>x.trim()).filter(Boolean);
+        for(let i=0;i<ls.length;i+=2) blocks.push({ lines:ls.slice(i,i+2), label });
+      });
+      return blocks;
+    };
+    let editing=false;
+    const openEdit = () => {
+      const s=curSong(); if(!s){ toast('Sélectionne d\'abord un chant.'); return; }
+      $('editNum').value = s.number!=null ? String(s.number) : '';
+      $('editTitle').value = s.title || '';
+      $('editLyrics').value = songToText(s);
+      editing=true;
+      $('blocksField').classList.add('hidden');
+      $('editForm').classList.remove('hidden');
+    };
+    const closeEdit = () => { editing=false; $('editForm').classList.add('hidden'); $('blocksField').classList.remove('hidden'); };
+    const saveEdit = async () => {
+      const s=curSong(); if(!s){ closeEdit(); return; }
+      const blocks=textToBlocks($('editLyrics').value);
+      if(!blocks.length){ toast('❌ Les paroles sont vides.'); return; }
+      const num=$('editNum').value.trim();
+      s.title = $('editTitle').value.trim() || s.title;
+      s.number = num==='' ? null : num;
+      s.blocks = blocks;
+      bi = Math.min(bi, blocks.length-1);
+      await saveCollections();
+      closeEdit();
+      push();                 // met à jour l'overlay en direct si affiché + le dock
+      toast('✓ Chant corrigé.');
+    };
+
+    // ---------- helpers état ----------
+    const curColl = () => collections[ci] || null;
+    const curSong = () => { const c=curColl(); return c && c.songs[si] ? c.songs[si] : null; };
+    const curBlock = () => { const s=curSong(); return s && s.blocks[bi] ? s.blocks[bi] : null; };
+
+    const hexToRgba = (hex,a) => { const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16); return `rgba(${r}, ${g}, ${b}, ${a})`; };
+
+    const buildConfig = () => {
+      const s=curSong(), b=curBlock();
+      const a=(Number($('bgOpacity').value)/100).toFixed(2);
+      let title = s ? s.title : '';
+      if (s && s.number != null && $('showNumber').checked) title = s.number + ' · ' + title;
+      return {
+        title,
+        l1: b ? (b.lines[0]||'') : '', l2: b ? (b.lines[1]||'') : '',
+        showTitle: $('showTitle').checked, bg: $('bgMode').value,
+        position: $('position').value, accent: $('accent').value,
+        bg1: hexToRgba($('bg1').value,a), bg2: hexToRgba($('bg2').value,a),
+        textSize: $('textSize').value+'px', titleSize: $('titleSize').value+'px'
+      };
+    };
+    const send = action => { const st={config:buildConfig(),visible,seq,action};
+      try { localStorage.setItem(STATE_KEY,JSON.stringify(st)); } catch(e) { toast('⚠️ Stockage du navigateur plein : '+e.message); }
+      saveDock(); if(channel) channel.postMessage(st); };
+    const push = () => { send('update'); render(); };
+
+    const setVisible = v => { visible=v;
+      onair.className='badge '+(v?'badge-live':'badge-off');
+      onair.innerHTML = v ? '<span class="dot"></span> À l\'antenne' : '● Hors antenne';
+      onair.style.marginLeft='auto'; };
+    const toast = m => { statusEl.textContent=m; statusEl.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>statusEl.classList.remove('show'),2600); };
+    // filet de sécurité : une erreur inattendue s'affiche au lieu d'un clic qui « ne fait rien »
+    window.addEventListener('error', e => toast('⚠️ Erreur : '+(e.message||'inconnue')));
+    window.addEventListener('unhandledrejection', e => toast('⚠️ Erreur : '+((e.reason&&e.reason.message)||e.reason||'inconnue')));
+
+    const showCurrent = () => { setVisible(true); seq++; send('show'); announceSolo(); render(); };
+    const hideOverlay = () => { setVisible(false); seq++; send('hide'); render(); toast('■ Masqué.'); };
+
+    const next = () => { const s=curSong(); if(!s) return; if (bi < s.blocks.length-1) { bi++; showCurrent(); } };
+    const prev = () => { if (bi > 0) { bi--; showCurrent(); } };
+    const goBlock = i => { const s=curSong(); if(!s) return; bi=Math.max(0,Math.min(s.blocks.length-1,i)); showCurrent(); };
+
+    // ---------- rendu ----------
+    // chips de collection (Direct + Collections) : cliquer en change l'active, immédiatement
+    const renderCollChips = () => {
+      const html = collections.map((c,i) =>
+        '<button type="button" class="chip'+(i===ci?' active':'')+'" data-i="'+i+'">'
+        + escapeHtml(c.name) + ' <span class="cnt">'+c.songs.length+'</span></button>'
+      ).join('') || '<span class="muted text-xs">Aucune collection — crée-en une ci-dessous.</span>';
+      ['collChips','collChips2'].forEach(id => {
+        const el = $(id); el.innerHTML = html;
+        el.querySelectorAll('.chip').forEach(btn => onTap(btn, () => selectCollection(+btn.dataset.i)));
+      });
+    };
+    const selectCollection = idx => {
+      if (idx === ci || !collections[idx]) return;   // déjà active : rien à refaire
+      closeEdit(); ci=idx; si=0; bi=0; highlightIdx=0; $('songSearch').value=''; push();
+    };
+    const MAX_RESULTS = 400;
+    // Recherche : numéro / titre d'abord, puis dans les paroles (avec l'écran correspondant)
+    const runSearch = () => {
+      const q = noAcc($('songSearch').value);
+      const inLyrics = $('searchLyrics').checked;
+      const scopeAll = $('searchAll').checked;
+      const scope = scopeAll ? collections.map((_,k)=>k) : [ci];
+      const byTitle = [], byLyrics = [];
+      scope.forEach(cIdx => {
+        const c = collections[cIdx]; if (!c) return;
+        for (let sIdx = 0; sIdx < c.songs.length; sIdx++) {
+          const s = c.songs[sIdx];
+          if (!q) { byTitle.push({ci:cIdx, si:sIdx, bi:0, snippet:''}); continue; }
+          if (noAcc(s.title).includes(q) || String(s.number ?? '').startsWith(q)) {
+            byTitle.push({ci:cIdx, si:sIdx, bi:0, snippet:''}); continue;
+          }
+          if (inLyrics) {
+            for (let k = 0; k < s.blocks.length; k++) {
+              const line = s.blocks[k].lines.join(' ');
+              if (noAcc(line).includes(q)) { byLyrics.push({ci:cIdx, si:sIdx, bi:k, snippet:line}); break; }
+            }
+          }
+        }
+      });
+      return byTitle.concat(byLyrics);
+    };
+
+    let highlightIdx = 0;   // index mis en valeur par le clavier (↑↓) dans la liste de résultats
+    const emptyMsg = text => '<div class="muted text-sm" style="padding:14px 10px; text-align:center; line-height:1.5">'
+      + text.split('\n').map(escapeHtml).join('<br>') + '</div>';
+
+    const renderResults = () => {
+      const wrap = $('songResults');
+      $('searchClearBtn').classList.toggle('hidden', !$('songSearch').value);
+      if (!collections.length) { wrap.innerHTML = emptyMsg('Aucune collection.\nVa dans l\'onglet « 📚 Collections ».'); $('songCount').textContent=''; results=[]; return; }
+      const all = runSearch();
+      results = all.slice(0, MAX_RESULTS);
+      if (!results.length) {
+        const q = $('songSearch').value.trim();
+        wrap.innerHTML = emptyMsg(q ? ('Aucun résultat pour « '+q+' ».') : 'Cette collection ne contient aucun chant pour l\'instant.\nVa dans l\'onglet « 📚 Collections » pour en importer.');
+        $('songCount').textContent = '0 résultat';
+        return;
+      }
+      const showColl = $('searchAll').checked && collections.length > 1;
+      const curIdx = results.findIndex(r => r.ci === ci && r.si === si);
+      highlightIdx = Math.max(0, Math.min(highlightIdx, results.length - 1));
+      wrap.innerHTML = '';
+      results.forEach((r, idx) => {
+        const s = collections[r.ci].songs[r.si];
+        const el = document.createElement('button');
+        el.type = 'button';
+        el.className = 'res' + (idx === curIdx ? ' cur' : '') + (idx === highlightIdx ? ' hl' : '');
+        const numHtml = s.number != null ? '<span class="num">'+escapeHtml(String(s.number))+'</span>' : '<span class="num dim">—</span>';
+        const collHtml = showColl ? '<div class="coll">'+escapeHtml(collections[r.ci].name)+'</div>' : '';
+        const snipHtml = r.snippet ? '<div class="snip">→ '+escapeHtml(r.snippet.slice(0, 80))+'</div>' : '';
+        el.innerHTML = numHtml + '<div>' + collHtml + '<div class="ttl">'+escapeHtml(s.title)+'</div>' + snipHtml + '</div>' + '<span class="arrow">▶</span>';
+        onTap(el, () => selectResult(idx));
+        wrap.appendChild(el);
+      });
+      keepVisible(wrap, wrap.querySelector('.hl') || wrap.querySelector('.cur'));
+      const total = collections.reduce((a,c)=>a+c.songs.length,0);
+      $('songCount').textContent = all.length + (all.length > MAX_RESULTS ? ' (400 affichés)' : '') + ' / ' + ($('searchAll').checked ? total : (curColl()?curColl().songs.length:0));
+    };
+
+    // clic (ou Entrée) sur un résultat -> saute directement à l'écran trouvé ET l'affiche à l'antenne
+    const selectResult = idx => {
+      const r = results[idx]; if (!r) return;
+      closeEdit();
+      ci = r.ci; si = r.si; bi = r.bi;
+      highlightIdx = idx;
+      showCurrent();
+    };
+    const render = () => {
+      renderCollChips();
+      renderResults();
+      const c=curColl(), s=curSong(), b=curBlock();
+      $('collInfo').textContent = c ? (c.name + ' — ' + c.songs.length + ' chant(s)') : 'Aucune collection.';
+      $('srcInfo').textContent = collections.length ? (collections.length + ' collection(s)') : 'Aucune collection';
+      $('nowHead').textContent = s ? ((s.number!=null?s.number+' · ':'')+s.title) : '—';
+      $('nowLive').classList.toggle('hidden', !(visible && s));
+      $('counter').textContent = s ? ((bi+1)+' / '+s.blocks.length) : '0 / 0';
+      $('blkLabel').textContent = b ? (b.label||'') : '';
+      $('now1').textContent = b ? (b.lines[0]||'—') : '—';
+      $('now1').classList.toggle('empty', !b);
+      $('now2').textContent = b ? (b.lines[1]||'') : '';
+
+      const wrap=$('blocks');
+      if (!s) { wrap.innerHTML='<div class="muted text-sm" style="padding:10px">Aucun chant. Va dans l\'onglet « Collections ».</div>'; return; }
+      wrap.innerHTML='';
+      s.blocks.forEach((bl,i)=>{
+        const el=document.createElement('button');
+        el.className='blk'+(i===bi?' cur':'');
+        el.innerHTML='<span class="i">'+(i+1)+'</span><span><span class="lb">'+escapeHtml(bl.label||'')+'</span><br><span class="tx">'+escapeHtml(bl.lines.join(' / '))+'</span></span>';
+        onTap(el, ()=>goBlock(i));
+        wrap.appendChild(el);
+      });
+      keepVisible(wrap, wrap.querySelector('.cur'));
+    };
+
+    // ---------- collections ----------
+    const ensureColl = () => { if (!collections.length) { collections.push({id:uid(),name:'Mes chants',songs:[]}); ci=0; } };
+    $('newCollBtn').addEventListener('click', async () => {
+      const n = prompt('Nom de la nouvelle collection :', 'Nouvelle collection');
+      if (n === null) return;
+      collections.push({ id:uid(), name:(n.trim()||'Sans nom'), songs:[] });
+      ci = collections.length-1; si=0; bi=0;
+      await saveCollections(); push(); toast('✓ Collection créée.');
+    });
+    $('renameCollBtn').addEventListener('click', async () => {
+      const c=curColl(); if(!c) return;
+      const n = prompt('Renommer la collection :', c.name);
+      if (n === null) return;
+      c.name = n.trim()||c.name; await saveCollections(); push();
+    });
+    $('deleteCollBtn').addEventListener('click', async () => {
+      const c=curColl(); if(!c) return;
+      if (!confirm('Supprimer la collection « '+c.name+' » et ses '+c.songs.length+' chant(s) ?')) return;
+      collections.splice(ci,1); ci=Math.max(0,ci-1); si=0; bi=0;
+      ensureColl(); await saveCollections(); push(); toast('Collection supprimée.');
+    });
+    $('emptyCollBtn').addEventListener('click', async () => {
+      const c=curColl(); if(!c) return;
+      if (!confirm('Vider « '+c.name+' » ('+c.songs.length+' chants) ?')) return;
+      c.songs=[]; si=0; bi=0; await saveCollections(); push();
+    });
+    let searchT;
+    $('songSearch').addEventListener('input', ()=>{ clearTimeout(searchT); highlightIdx=0; searchT = setTimeout(renderResults, 160); });
+    // navigation clavier dans le champ de recherche : ↑↓ pour parcourir, Entrée pour afficher
+    $('songSearch').addEventListener('keydown', e=>{
+      if (!results.length) return;
+      if (e.key==='ArrowDown') { e.preventDefault(); highlightIdx=Math.min(results.length-1, highlightIdx+1); renderResults(); }
+      else if (e.key==='ArrowUp') { e.preventDefault(); highlightIdx=Math.max(0, highlightIdx-1); renderResults(); }
+      else if (e.key==='Enter') { e.preventDefault(); selectResult(highlightIdx); }
+    });
+    $('searchClearBtn').addEventListener('click', ()=>{ $('songSearch').value=''; highlightIdx=0; renderResults(); $('songSearch').focus(); });
+    $('searchLyrics').addEventListener('change', ()=>{ highlightIdx=0; renderResults(); });
+    $('searchAll').addEventListener('change', ()=>{ highlightIdx=0; renderResults(); });
+
+    // ---------- import ----------
+    const addSongs = async (songs, label) => {
+      ensureColl();
+      const c=curColl();
+      songs.forEach(s => { s.blocks = arrangeBlocks(s.blocks); });
+      c.songs = c.songs.concat(songs);
+      si = Math.max(0, c.songs.length - songs.length); bi = 0;
+      await saveCollections();
+      $('importInfo').textContent = '✓ '+songs.length+' chant(s) ajouté(s) à « '+c.name+' »'+(label?' ('+label+')':'');
+      push(); toast('✓ '+songs.length+' chant(s) importé(s).');
+    };
+    const handleJson = async (raw, label) => {
+      let j; try { j=JSON.parse(raw.replace(/^﻿/,'')); }
+      catch(e) { toast('❌ JSON invalide : '+e.message); return; }
+      let songs=[];
+      if (isHymnBook(j)) songs = parseHymnBook(j);
+      else if (Array.isArray(j)) songs = parseSimpleList(j);
+      else if (j && typeof j==='object') songs = parseSimpleList(j.songs||j.hymns||j.data||[]);
+      if (!songs.length) { toast('❌ Aucun chant reconnu dans ce JSON.'); return; }
+      await addSongs(songs, label);
+    };
+    $('jsonBtn').addEventListener('click', ()=>$('jsonInput').click());
+    $('txtBtn').addEventListener('click', ()=>$('txtInput').click());
+    $('jsonInput').addEventListener('change', e=>{ const f=e.target.files[0]; if(!f) return;
+      const r=new FileReader(); r.onload=()=>handleJson(String(r.result), f.name); r.readAsText(f,'utf-8'); e.target.value=''; });
+    $('txtInput').addEventListener('change', e=>{ const f=e.target.files[0]; if(!f) return;
+      const r=new FileReader(); r.onload=()=>{ const s=parseTextSongs(String(r.result)); if(!s.length){toast('Aucun chant reconnu.');return;} addSongs(s,f.name); }; r.readAsText(f,'utf-8'); e.target.value=''; });
+    $('addPastedBtn').addEventListener('click', async ()=>{
+      const raw=$('rawInput').value.trim(); if(!raw){toast('Rien à ajouter.');return;}
+      if (raw.startsWith('[')||raw.startsWith('{')) { await handleJson(raw); return; }
+      const songs=parseTextSongs(raw);
+      if(!songs.length){toast('Aucun chant reconnu.');return;}
+      await addSongs(songs); $('rawInput').value='';
+    });
+
+    // ---------- Bibliothèque en ligne : hymnal.rindra.org ----------
+    const API='https://hymnal.rindra.org';
+    let apiCats=[], apiAbort=false;
+    const apiInfo = m => { $('apiInfo').textContent = m; };
+    const fromApiHymn = h => {
+      const blocks=[];
+      (h.Lyrics||[]).forEach(sec=>{
+        const lines=String(sec.text||'').split('\n').map(s=>s.trim()).filter(Boolean);
+        blocks.push(...linesToBlocks(lines, labelFor(sec.label)));
+      });
+      return { number: h.Number ?? null, title: h.Title || ('Chant '+(h.Number??'')), blocks: arrangeBlocks(blocks) };
+    };
+
+    $('apiLoadBtn').addEventListener('click', async ()=>{
+      apiInfo('Connexion à l\'API…');
+      try {
+        apiCats = await (await fetch(API+'/api/categories.json',{cache:'no-store'})).json();
+        $('apiCollSel').innerHTML = apiCats.map(c=>`<option value="${c.ID}">${escapeHtml(c.Name)} — ${c.count} chants</option>`).join('');
+        apiInfo('✓ '+apiCats.length+' collections disponibles. Choisis-en une puis « Importer ».');
+      } catch(e) { apiInfo('❌ API injoignable (vérifie la connexion internet).'); }
+    });
+    $('apiCancelBtn').addEventListener('click', ()=>{ apiAbort=true; apiInfo('Annulation en cours…'); });
+
+    $('apiImportBtn').addEventListener('click', async ()=>{
+      const id=$('apiCollSel').value;
+      if (!id) { apiInfo('Clique d\'abord sur « Charger les collections ».'); return; }
+      const cat = apiCats.find(c=>String(c.ID)===String(id));
+      apiAbort=false; $('apiCancelBtn').classList.remove('hidden');
+      apiInfo('Récupération de la liste…');
+      try {
+        const list = await (await fetch(API+'/api/categories/'+id+'.json',{cache:'no-store'})).json();
+        const ids = list.map(h=>h.ID);
+        const out = new Array(ids.length);
+        let i=0, done=0;
+        const worker = async () => {
+          while (i < ids.length && !apiAbort) {
+            const k=i++;
+            try { out[k] = await (await fetch(API+'/api/hymns/'+ids[k]+'.json',{cache:'no-store'})).json(); }
+            catch(e) { out[k]=null; }
+            done++;
+            if (done%15===0 || done===ids.length) apiInfo('⬇️ '+done+' / '+ids.length+' chants…');
+          }
+        };
+        await Promise.all(Array.from({length:12}, worker));
+        $('apiCancelBtn').classList.add('hidden');
+        if (apiAbort) { apiInfo('Import annulé.'); return; }
+        const songs = out.filter(Boolean).map(fromApiHymn).filter(s=>s.blocks.length);
+        if (!songs.length) { apiInfo('❌ Aucun chant récupéré.'); return; }
+        const name = cat ? cat.Name : ('Collection '+id);
+        let idx = collections.findIndex(c=>c.name===name);
+        if (idx < 0) { collections.push({id:uid(), name, songs:[]}); idx = collections.length-1; }
+        collections[idx].songs = songs;
+        ci=idx; si=0; bi=0;
+        await saveCollections();
+        apiInfo('✓ « '+name+' » : '+songs.length+' chants enregistrés — disponibles hors ligne.');
+        push(); toast('✓ '+songs.length+' chants importés.');
+      } catch(e) {
+        $('apiCancelBtn').classList.add('hidden');
+        apiInfo('❌ Erreur : '+e.message);
+      }
+    });
+
+    // ---------- boutons ----------
+    $('nextBtn').addEventListener('click', next);
+    $('prevBtn').addEventListener('click', prev);
+    $('showBtn').addEventListener('click', showCurrent);
+    $('hideBtn').addEventListener('click', hideOverlay);
+    $('editBtn').addEventListener('click', ()=>{ editing ? closeEdit() : openEdit(); });
+    $('saveEditBtn').addEventListener('click', saveEdit);
+    $('cancelEditBtn').addEventListener('click', closeEdit);
+
+    const refreshLabels = () => {
+      sizeFields.forEach(f=>{ const el=$(f+'Val'); if(el) el.textContent=$(f).value+' px'; });
+      $('bgOpacityVal').textContent=$('bgOpacity').value+' %';
+    };
+    [...styleText,...styleCheck].forEach(f=>$(f).addEventListener('input',()=>{ refreshLabels(); push(); }));
+
+    $('copyBtn').addEventListener('click', ()=>navigator.clipboard.writeText(baseUrl).then(()=>toast('📋 URL copiée.')).catch(()=>toast(baseUrl)));
+    $('resetBtn').addEventListener('click', ()=>{
+      const d={position:'bottom',bgMode:'gradient',accent:'#b08d4f',bg1:'#060e26',bg2:'#04091a',bgOpacity:'88',textSize:'46',titleSize:'20'};
+      Object.entries(d).forEach(([k,v])=>$(k).value=v);
+      $('showTitle').checked=true; $('showNumber').checked=true;
+      refreshLabels(); push(); toast('↺ Style réinitialisé.');
+    });
+
+    document.addEventListener('keydown', e=>{
+      const tag=(e.target.tagName||'').toLowerCase();
+      if (tag==='input'||tag==='textarea'||tag==='select') return;
+      if (e.key==='ArrowRight'){e.preventDefault();next();}
+      else if (e.key==='ArrowLeft'){e.preventDefault();prev();}
+      else if (e.key==='Escape'){e.preventDefault();hideOverlay();}
+      else if (e.key===' '){e.preventDefault(); visible?hideOverlay():showCurrent();}
+    });
+
+    // ---------- persistance des réglages ----------
+    const saveDock = () => {
+      const style={}; styleText.forEach(f=>style[f]=$(f).value); styleCheck.forEach(f=>style[f]=$(f).checked);
+      try { localStorage.setItem(DOCK_KEY, JSON.stringify({ style, ci, si, bi })); } catch(e){}
+    };
+    const loadDock = async () => {
+      let o={}; try{ o=JSON.parse(localStorage.getItem(DOCK_KEY)||'{}'); }catch(e){}
+      if (o.style) { styleText.forEach(f=>{ if(o.style[f]!=null) $(f).value=o.style[f]; }); styleCheck.forEach(f=>{ if(o.style[f]!=null) $(f).checked=o.style[f]; }); }
+      try { const c=await idbGet('collections'); if (Array.isArray(c)) collections=c; } catch(e){}
+      // migration : anciennes paroles collées -> collection
+      if (!collections.length && o.text) {
+        const songs=parseTextSongs(o.text);
+        if (songs.length) { collections=[{id:uid(),name:'Mes chants',songs}]; await saveCollections(); }
+      }
+      // migration (une seule fois) : chants déjà importés -> couplet, refrain, couplet, refrain…
+      // (marqueur pour ne jamais retoucher ensuite un chant corrigé à la main)
+      try {
+        if (!localStorage.getItem('lyrics-dock-arranged-v1') && collections.length) {
+          let changed=0;
+          const sig = bl => JSON.stringify((bl||[]).map(b=>[b.label,b.lines]));
+          collections.forEach(c=>c.songs.forEach(s=>{ const nb=arrangeBlocks(s.blocks); if (sig(nb)!==sig(s.blocks)) changed++; s.blocks=nb; }));
+          if (changed) await saveCollections();
+          localStorage.setItem('lyrics-dock-arranged-v1','1');
+          if (changed) setTimeout(()=>toast('✓ '+changed+' chant(s) réorganisé(s) : couplet, refrain, couplet, refrain…'), 800);
+        }
+      } catch(e){}
+      ensureColl();
+      ci=Math.min(o.ci||0, collections.length-1);
+      const c=curColl(); si=c?Math.min(o.si||0, Math.max(0,c.songs.length-1)):0;
+      const s=curSong(); bi=s?Math.min(o.bi||0, Math.max(0,s.blocks.length-1)):0;
+    };
+
+    // ---------- aperçu + onglets ----------
+    const scalePreview = () => { const fr=preview.parentElement; if(fr&&fr.clientWidth>0) preview.style.transform='scale('+(fr.clientWidth/1920)+')'; };
+    window.addEventListener('resize', scalePreview);
+    if ('ResizeObserver' in window) new ResizeObserver(scalePreview).observe(preview.parentElement);
+    preview.addEventListener('load', scalePreview);
+    document.querySelectorAll('.mobile-tabs button').forEach(btn=>btn.addEventListener('click',()=>{
+      const t=btn.dataset.target;
+      document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===t));
+      document.querySelectorAll('.mobile-tabs button').forEach(b=>b.classList.toggle('active',b===btn));
+      scalePreview();
+    }));
+
+    // ---------- init ----------
+    (async () => {
+      await loadDock();
+      refreshLabels(); setVisible(false);
+      try { const p=JSON.parse(localStorage.getItem(STATE_KEY)||'null'); if(p&&p.seq) seq=p.seq; }catch(e){}
+      push();
+      preview.src = baseUrl+'?preview=1';
+      scalePreview();
+    })();
+  </script>
+</body>
+</html>

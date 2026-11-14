@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Projection — Régie</title>
+  <link rel="stylesheet" href="dock-ui.css">
+  <style>
+    .preview-frame { position:relative; overflow:hidden; }
+    #preview { position:absolute; top:0; left:0; width:1920px; height:1080px; transform-origin:top left; border:0; }
+    .hidden { display:none !important; }
+    .link { display:flex; align-items:flex-start; gap:9px; font-size:12.5px; line-height:1.45; padding:9px 11px;
+      border-radius:calc(var(--radius) - .2rem); border:1px solid hsl(var(--border)); color:hsl(var(--muted-foreground)); }
+    .link .ld { flex:0 0 auto; width:9px; height:9px; border-radius:50%; margin-top:4px; background:hsl(var(--muted-foreground)); }
+    .link.ok { border-color:hsl(142 60% 45% / .45); color:hsl(var(--foreground)); } .link.ok .ld { background:hsl(142 65% 45%); }
+    .link.ko { border-color:hsl(var(--destructive)/.55); background:hsl(var(--destructive)/.08); color:hsl(var(--foreground)); } .link.ko .ld { background:hsl(var(--destructive)); }
+    .link code { font-size:11.5px; }
+    .now { display:flex; align-items:center; gap:10px; padding:11px 13px; border-radius:calc(var(--radius) - .2rem); border:1px solid hsl(var(--border)); background:hsl(var(--muted)); }
+    .now .tag { font-size:11px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; padding:3px 9px; border-radius:999px; background:hsl(var(--muted-foreground)/.2); color:hsl(var(--muted-foreground)); flex:0 0 auto; }
+    .now.live .tag { background:hsl(var(--live)/.18); color:hsl(var(--live)); }
+    .now .what { font-size:13.5px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .chips { display:flex; flex-wrap:wrap; gap:7px; }
+    .chip { display:inline-flex; align-items:center; padding:7px 13px; border-radius:999px; border:1px solid hsl(var(--border)); background:hsl(var(--card));
+      color:hsl(var(--foreground)); font:inherit; font-size:12.5px; font-weight:650; cursor:pointer; touch-action:manipulation; }
+    .chip:hover { border-color:hsl(var(--brand)/.5); background:hsl(var(--accent)); }
+    .chip.active { background:hsl(var(--brand)); border-color:hsl(var(--brand)); color:#1a1206; font-weight:700; }
+    .mobile-tabs { display:none; }
+    @media (max-width:880px) {
+      body { padding:0; }
+      .mobile-app { display:flex; flex-direction:column; height:100dvh; }
+      .page-header { padding:10px 14px; margin:0; gap:8px; border-bottom:1px solid hsl(var(--border)); }
+      .page-header h1 { font-size:16px; } .page-header .desc { display:none; }
+      .app-grid { flex:1; min-height:0; display:block; position:relative; gap:0; }
+      .app-grid > .col { display:contents; }
+      .panel { position:absolute; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:12px; display:none; }
+      .panel.active { display:block; }
+      .card { box-shadow:none; border-radius:12px; }
+      .mobile-tabs { display:grid; grid-template-columns:repeat(2,1fr); background:hsl(var(--card)); border-top:1px solid hsl(var(--border)); padding-bottom:env(safe-area-inset-bottom,0); }
+      .mobile-tabs button { display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 4px; background:none; border:0; cursor:pointer; color:hsl(var(--muted-foreground)); font:inherit; font-size:17px; line-height:1; }
+      .mobile-tabs button span { font-size:10.5px; font-weight:500; }
+      .mobile-tabs button.active { color:hsl(var(--brand)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container mobile-app">
+    <div class="page-header">
+      <h1>📽️ Projection</h1>
+      <span class="desc">Paroles et versets en grand, plein écran</span>
+    </div>
+
+    <div class="app-grid">
+      <div class="col">
+        <section class="panel active" data-panel="reglages">
+        <div class="card">
+          <div class="card-header"><div class="card-title">⚙️ Réglages</div>
+            <div class="card-description">Les paroles et versets viennent des docks <b>Paroles</b> et <b>Bible</b> : affiche-les comme d'habitude, ils apparaissent ici en grand. Logo, titre et photos sont ceux de <b>« Début live »</b>.</div></div>
+          <div class="card-content">
+            <div class="link" id="link"><span class="ld"></span><span id="linkTxt">Recherche de la scène OBS…</span></div>
+
+            <div class="now" id="now"><span class="tag" id="nowTag">Attente</span><span class="what" id="nowWhat">Rien n'est affiché : titre de la soirée</span></div>
+
+            <div class="field">
+              <div class="label">Colonne de photos pendant un chant / verset <span class="hint">plus elle est étroite, plus le texte est grand</span></div>
+              <div class="muted text-xs" style="margin-bottom:6px">À l'attente, la scène reste identique à « Début live » (colonne large).</div>
+              <div class="chips" id="layoutChips">
+                <button type="button" class="chip" data-v="narrow">Étroite</button>
+                <button type="button" class="chip" data-v="wide">Large</button>
+                <button type="button" class="chip" data-v="none">Aucune</button>
+              </div>
+            </div>
+            <div class="field">
+              <div class="label">Alignement du texte</div>
+              <div class="chips" id="alignChips">
+                <button type="button" class="chip" data-v="left">À gauche</button>
+                <button type="button" class="chip" data-v="center">Centré</button>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label" for="lyricsMax">Taille maximale des paroles <span class="hint tabnum" id="lyricsMaxVal">150 px</span></label>
+              <input id="lyricsMax" type="range" min="60" max="220" value="150" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="bibleMax">Taille maximale des versets <span class="hint tabnum" id="bibleMaxVal">96 px</span></label>
+              <input id="bibleMax" type="range" min="40" max="150" value="96" style="width:100%">
+              <div class="muted text-xs">Le texte se réduit tout seul s'il est long pour toujours tenir à l'écran. Dans le dock Bible, « Longueur max par écran » règle la taille des morceaux de verset.</div>
+            </div>
+            <div class="field">
+              <div class="label">Quand rien n'est affiché</div>
+              <div class="chips" id="idleChips">
+                <button type="button" class="chip" data-v="title">Titre de la soirée</button>
+                <button type="button" class="chip" data-v="blank">Habillage seul</button>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label" for="footerText">Texte du pied de page <span class="hint">vide = titre de la soirée</span></label>
+              <input class="input" id="footerText" type="text" placeholder="Semaine de Prière · Vivre dans la société">
+            </div>
+            <div class="btn-row"><button class="btn btn-brand" id="replayBtn">↻ Rejouer l'animation d'entrée</button></div>
+            <div class="status" id="status"></div>
+          </div>
+        </div>
+        </section>
+      </div>
+
+      <div class="col">
+        <section class="panel" data-panel="preview">
+        <div class="card">
+          <div class="card-header"><div class="card-title">👁️ Aperçu</div>
+            <div class="card-description">Teste le rendu sans rien afficher à l'antenne.</div></div>
+          <div class="card-content">
+            <div class="chips" id="demoChips">
+              <button type="button" class="chip" data-v="lyrics">Exemple : paroles</button>
+              <button type="button" class="chip" data-v="bible">Exemple : verset</button>
+              <button type="button" class="chip" data-v="idle">Attente</button>
+              <button type="button" class="chip" data-v="">Réel</button>
+            </div>
+            <div class="preview-frame"><iframe id="preview" title="Aperçu projection"></iframe></div>
+          </div>
+        </div>
+        </section>
+      </div>
+    </div>
+
+    <nav class="mobile-tabs">
+      <button data-target="reglages" class="active">⚙️<span>Réglages</span></button>
+      <button data-target="preview">👁️<span>Aperçu</span></button>
+    </nav>
+  </div>
+
+  <script>
+    const STATE_KEY='projection-live-state', DOCK_KEY='projection-live-dock';
+    const $ = id => document.getElementById(id);
+    const statusEl=$('status'), preview=$('preview');
+    const toast = m => { statusEl.textContent=m; statusEl.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>statusEl.classList.remove('show'),2400); };
+    const DEFAULTS = { layout:'narrow', align:'left', lyricsMax:150, bibleMax:96, idle:'title', footerText:'' };
+    let cfg = Object.assign({}, DEFAULTS), seq = 0, demo = 'lyrics';
+
+    const send = () => { const st = { config:cfg, seq };
+      try { localStorage.setItem(STATE_KEY, JSON.stringify(st)); localStorage.setItem(DOCK_KEY, JSON.stringify(cfg)); } catch(e) { toast('⚠️ Stockage plein : '+e.message); } };
+    const load = () => { try { Object.assign(cfg, JSON.parse(localStorage.getItem(DOCK_KEY)||'{}')); } catch(e){}
+      try { const s = JSON.parse(localStorage.getItem(STATE_KEY)||'null'); if (s) seq = s.seq || 0; } catch(e){} };
+
+    // puces de choix (disposition, alignement, attente)
+    const chipGroup = (id, key) => { const box=$(id);
+      const paint = () => box.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.v === String(cfg[key])));
+      box.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => { cfg[key] = c.dataset.v; paint(); send(); }));
+      return paint; };
+    const repaint = [ chipGroup('layoutChips','layout'), chipGroup('alignChips','align'), chipGroup('idleChips','idle') ];
+
+    const labels = () => { $('lyricsMaxVal').textContent = $('lyricsMax').value + ' px'; $('bibleMaxVal').textContent = $('bibleMax').value + ' px'; };
+    ['lyricsMax','bibleMax'].forEach(k => $(k).addEventListener('input', () => { cfg[k] = Number($(k).value); labels(); clearTimeout(send._t); send._t = setTimeout(send, 120); }));
+    $('footerText').addEventListener('input', () => { cfg.footerText = $('footerText').value; clearTimeout(send._t); send._t = setTimeout(send, 400); });
+    $('replayBtn').addEventListener('click', () => { seq++; send(); toast('↻ Animation rejouée.'); });
+
+    // ce qui est à l'écran en ce moment (lu depuis les docks Paroles / Bible)
+    const rd = k => { try { return JSON.parse(localStorage.getItem(k)||'null'); } catch(e){ return null; } };
+    const refreshNow = () => { const ly=rd('lyrics-state'), bi=rd('bible-state'), el=$('now');
+      let tag='Attente', what='Rien n\'est affiché : titre de la soirée', live=false;
+      if (ly && ly.visible && ly.config) { tag='Paroles'; live=true; what=[ly.config.title, ly.config.l1].filter(Boolean).join(' — '); }
+      else if (bi && bi.visible && bi.config) { tag='Verset'; live=true; what=[bi.config.ref, (bi.config.text||'').slice(0,60)].filter(Boolean).join(' — '); }
+      el.classList.toggle('live', live); $('nowTag').textContent = tag; $('nowWhat').textContent = what; };
+    setInterval(refreshNow, 500);
+
+    const checkLink = () => { let t=0; try { t=Number(localStorage.getItem('projection-live-ping'))||0; } catch(e){}
+      const ok = Date.now()-t < 6000, el = $('link'); el.className = 'link ' + (ok?'ok':'ko');
+      $('linkTxt').innerHTML = ok ? 'Scène OBS connectée' : '<b>Scène OBS non détectée.</b> La source « PROJECTION LIVE » doit être dans la scène affichée, en mode URL (« Fichier local » décoché) : <code>file:///C:/Users/harylala/Documents/HTML%20OVERLAY/projection-live.html</code>'; };
+    setInterval(checkLink, 2000);
+
+    // aperçu : exemple choisi (le dock ne touche à rien à l'antenne)
+    const scalePreview = () => { const fr=preview.parentElement; if (fr && fr.clientWidth>0) { preview.style.transform='scale('+(fr.clientWidth/1920)+')'; fr.style.height=(fr.clientWidth*9/16)+'px'; } };
+    const setDemo = d => { demo = d; document.querySelectorAll('#demoChips .chip').forEach(c => c.classList.toggle('active', c.dataset.v === d));
+      preview.src = 'projection-live.html?preview=1' + (d ? '&demo=' + d : ''); };
+    document.querySelectorAll('#demoChips .chip').forEach(c => c.addEventListener('click', () => setDemo(c.dataset.v)));
+    window.addEventListener('resize', scalePreview);
+    if ('ResizeObserver' in window) new ResizeObserver(scalePreview).observe(preview.parentElement);
+    preview.addEventListener('load', scalePreview);
+    document.querySelectorAll('.mobile-tabs button').forEach(btn => btn.addEventListener('click', () => {
+      const t = btn.dataset.target;
+      document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.dataset.panel === t));
+      document.querySelectorAll('.mobile-tabs button').forEach(b => b.classList.toggle('active', b === btn));
+      scalePreview(); }));
+
+    load(); $('lyricsMax').value = cfg.lyricsMax; $('bibleMax').value = cfg.bibleMax; $('footerText').value = cfg.footerText || '';
+    labels(); repaint.forEach(f => f()); send(); refreshNow(); checkLink(); setDemo('lyrics'); scalePreview();
+  </script>
+</body>
+</html>

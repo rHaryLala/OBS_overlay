@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Début du direct — Régie</title>
+  <link rel="stylesheet" href="dock-ui.css">
+  <style>
+    .preview-frame { position:relative; overflow:hidden; }
+    #preview { position:absolute; top:0; left:0; width:1920px; height:1080px; transform-origin:top left; border:0; }
+    .chk { display:flex; align-items:center; gap:9px; font-size:13.5px; cursor:pointer; padding:3px 0; }
+    .chk input { width:18px; height:18px; accent-color:hsl(var(--brand)); }
+    .link { display:flex; align-items:flex-start; gap:9px; font-size:12.5px; line-height:1.45; padding:9px 11px;
+      border-radius:calc(var(--radius) - .2rem); border:1px solid hsl(var(--border)); color:hsl(var(--muted-foreground)); }
+    .link .ld { flex:0 0 auto; width:9px; height:9px; border-radius:50%; margin-top:4px; background:hsl(var(--muted-foreground)); }
+    .link.ok { border-color:hsl(142 60% 45% / .45); color:hsl(var(--foreground)); } .link.ok .ld { background:hsl(142 65% 45%); }
+    .link.ko { border-color:hsl(var(--destructive)/.55); background:hsl(var(--destructive)/.08); color:hsl(var(--foreground)); } .link.ko .ld { background:hsl(var(--destructive)); }
+    .link code { font-size:11.5px; }
+    .hidden { display:none !important; }
+    .cd { font-size:30px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:.02em; }
+    .cd.off { color:hsl(var(--muted-foreground)); font-size:15px; font-weight:500; }
+    .thumbs { display:grid; grid-template-columns:repeat(auto-fill, minmax(120px,1fr)); gap:8px; }
+    .thumb { position:relative; aspect-ratio:16/10; border-radius:8px; overflow:hidden; border:1px solid hsl(var(--border)); background:hsl(var(--muted)); }
+    .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+    .thumb .tools { position:absolute; inset:auto 4px 4px 4px; display:flex; gap:4px; justify-content:flex-end; }
+    .thumb button { width:26px; height:26px; border-radius:6px; border:0; cursor:pointer; background:rgba(10,14,22,.78); color:#fff; font-size:13px; }
+    .thumb button:hover { background:rgba(10,14,22,.95); }
+    .thumb .n { position:absolute; left:6px; top:5px; font-size:11px; font-weight:700; background:rgba(10,14,22,.7); color:#fff; padding:1px 6px; border-radius:5px; }
+    .presets { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+    .preset { display:flex; align-items:center; gap:6px; border:1px solid hsl(var(--border)); border-radius:10px; padding:6px 6px 6px 10px; background:hsl(var(--card)); }
+    .preset .pt { flex:1; min-width:0; cursor:pointer; touch-action:manipulation; }
+    .preset .pn { font-weight:600; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .preset .pd { font-size:11.5px; color:hsl(var(--muted-foreground)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .preset:hover { border-color:hsl(var(--brand)); }
+    .presets .none { font-size:12.5px; color:hsl(var(--muted-foreground)); }
+    .mobile-tabs { display:none; }
+    @media (max-width:880px) {
+      body { padding:0; }
+      .mobile-app { display:flex; flex-direction:column; height:100dvh; }
+      .page-header { padding:10px 14px; margin:0; gap:8px; border-bottom:1px solid hsl(var(--border)); }
+      .page-header h1 { font-size:16px; } .page-header .desc { display:none; }
+      .app-grid { flex:1; min-height:0; display:block; position:relative; gap:0; }
+      .app-grid > .col { display:contents; }
+      .panel { position:absolute; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:12px; display:none; }
+      .panel.active { display:block; }
+      .card { box-shadow:none; border-radius:12px; }
+      .mobile-tabs { display:grid; grid-template-columns:repeat(4,1fr); background:hsl(var(--card)); border-top:1px solid hsl(var(--border)); padding-bottom:env(safe-area-inset-bottom,0); }
+      .mobile-tabs button { display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 4px; background:none; border:0; cursor:pointer; color:hsl(var(--muted-foreground)); font:inherit; font-size:17px; line-height:1; }
+      .mobile-tabs button span { font-size:10.5px; font-weight:500; }
+      .mobile-tabs button.active { color:hsl(var(--brand)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container mobile-app">
+    <div class="page-header">
+      <h1>🎬 Début du direct</h1>
+      <span class="desc">Scène d'ouverture animée</span>
+    </div>
+
+    <div class="app-grid">
+      <div class="col">
+        <section class="panel active" data-panel="direct">
+        <div class="card">
+          <div class="card-header"><div class="card-title">▶ Direct</div>
+            <div class="card-description">Les textes se mettent à jour en direct, en fondu.</div></div>
+          <div class="card-content">
+            <div class="link" id="link"><span class="ld"></span><span id="linkTxt">Recherche de la scène OBS…</span></div>
+
+            <div class="field">
+              <div class="label">🖼️ Diaporama de photos <span class="hint" id="shortInfo"></span></div>
+              <div class="btn-row">
+                <button class="btn btn-brand btn-sm" id="addBtn2">＋ Ajouter des photos</button>
+                <button class="btn btn-outline btn-sm" id="manageBtn">Gérer / ordre</button>
+              </div>
+              <select class="input" id="photoMode">
+                <option value="scroll">Défilement continu — de haut en bas</option>
+                <option value="step">Pas à pas — une photo à la fois, de haut en bas</option>
+                <option value="fade">Fondu dans 3 cases (ancien style)</option>
+              </select>
+            </div>
+            <hr class="separator">
+
+            <div class="field">
+              <div class="label">Compte à rebours <span class="hint">remplace la phrase du bas</span></div>
+              <div class="cd off" id="cdView">Aucun compte à rebours</div>
+              <div class="btn-row">
+                <button class="btn btn-outline btn-sm" data-min="5">5 min</button>
+                <button class="btn btn-outline btn-sm" data-min="10">10 min</button>
+                <button class="btn btn-outline btn-sm" data-min="15">15 min</button>
+                <button class="btn btn-outline btn-sm" data-min="30">30 min</button>
+              </div>
+              <div class="row" style="gap:8px; margin-top:4px">
+                <span class="muted text-sm">ou jusqu'à</span>
+                <input class="input" id="cdAt" type="time" style="width:120px">
+                <button class="btn btn-secondary btn-sm" id="cdAtBtn">Lancer</button>
+                <button class="btn btn-ghost btn-sm" id="cdStop">Arrêter</button>
+              </div>
+            </div>
+            <hr class="separator">
+
+            <div class="field">
+              <div class="label">💾 Mes présentations enregistrées <span class="hint" id="presetCount"></span></div>
+              <div class="row" style="gap:8px">
+                <input class="input" id="presetName" type="text" placeholder="Nom (ex. Culte du dimanche)" style="flex:1;min-width:0">
+                <button class="btn btn-brand btn-sm" id="presetSave">Enregistrer</button>
+              </div>
+              <div class="presets" id="presets"></div>
+            </div>
+            <hr class="separator">
+
+            <div class="field"><label class="label" for="kicker">Petit texte du haut</label><input class="input" id="kicker" type="text"></div>
+            <div class="grid-2">
+              <div class="field"><label class="label" for="title1">Grand titre — ligne 1 <span class="hint">blanc</span></label><input class="input" id="title1" type="text"></div>
+              <div class="field"><label class="label" for="title2">Grand titre — ligne 2 <span class="hint">couleur</span></label><input class="input" id="title2" type="text"></div>
+            </div>
+            <div class="field"><label class="label" for="subtitle">Texte secondaire</label><input class="input" id="subtitle" type="text"></div>
+            <div class="field"><label class="label" for="speaker">Ligne de détail <span class="hint">nom, date, lieu…</span></label>
+              <div class="row" style="gap:8px; margin-bottom:6px">
+                <select class="input" id="detailMode" style="flex:1;min-width:0">
+                  <option value="text">✏️ Texte libre</option>
+                  <option value="today">📅 Date du jour (automatique)</option>
+                  <option value="pick">🗓️ Choisir une date</option>
+                </select>
+                <input class="input" id="detailDate" type="date" style="width:160px;flex:none" hidden>
+              </div>
+              <input class="input" id="speaker" type="text"></div>
+            <div class="grid-2">
+              <div class="field"><label class="label" for="footerText">Message du bas</label><input class="input" id="footerText" type="text"></div>
+              <div class="field"><label class="label" for="footR">Petit texte bas droite</label><input class="input" id="footR" type="text"></div>
+            </div>
+            <div class="btn-row"><button class="btn btn-brand" id="replayBtn">↻ Rejouer l'animation d'entrée</button></div>
+            <div class="status" id="status"></div>
+          </div>
+        </div>
+        </section>
+
+        <section class="panel" data-panel="photos">
+        <div class="card">
+          <div class="card-header"><div class="card-title">🖼️ Photos du carrousel</div>
+            <div class="card-description">La colonne de droite défile de haut en bas avec ces photos, dans cet ordre (◀ ▶ pour la changer). 5 à 15 photos conseillées.</div></div>
+          <div class="card-content">
+            <div class="btn-row">
+              <input type="file" id="fileIn" accept="image/*" multiple style="display:none">
+              <button class="btn btn-brand btn-sm" id="addBtn">＋ Ajouter des photos</button>
+              <button class="btn btn-ghost btn-sm" id="defBtn">↺ Photos par défaut</button>
+            </div>
+            <div class="mini muted text-xs" id="photoInfo"></div>
+            <div class="thumbs" id="thumbs"></div>
+          </div>
+        </div>
+        </section>
+      </div>
+
+      <div class="col">
+        <section class="panel" data-panel="preview">
+        <div class="card">
+          <div class="card-header"><div class="card-title">👁️ Aperçu</div></div>
+          <div class="card-content"><div class="preview-frame"><iframe id="preview" title="Aperçu début"></iframe></div></div>
+        </div>
+        </section>
+
+        <section class="panel" data-panel="style">
+        <div class="card">
+          <div class="card-header"><div class="card-title">🎨 Réglages</div></div>
+          <div class="card-content">
+            <div class="grid-2">
+              <div class="field"><label class="label" for="brandL1">Logo — ligne 1</label><input class="input" id="brandL1" type="text"></div>
+              <div class="field"><label class="label" for="brandL2">Logo — ligne 2</label><input class="input" id="brandL2" type="text"></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label class="label" for="countdownLabel">Texte du compte à rebours</label><input class="input" id="countdownLabel" type="text"></div>
+              <div class="field"><label class="label" for="wmText">Filigrane</label><input class="input" id="wmText" type="text" maxlength="5"></div>
+            </div>
+            <div class="field" id="perViewField">
+              <label class="label" for="perView">Photos visibles à la fois</label>
+              <select class="input" id="perView">
+                <option value="1">1 — grande photo</option>
+                <option value="2">2 — comme la maquette</option>
+                <option value="3">3 — petites photos</option>
+              </select>
+            </div>
+            <div class="field" id="speedField">
+              <label class="label" for="speed">Vitesse du défilement <span class="hint tabnum" id="speedVal">45 px/s</span></label>
+              <input id="speed" type="range" min="15" max="140" value="45" style="width:100%">
+            </div>
+            <div class="field" id="intervalField">
+              <label class="label" for="interval">Durée par photo <span class="hint tabnum" id="intervalVal">7 s</span></label>
+              <input id="interval" type="range" min="4" max="20" value="7" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="titleSize">Taille du titre <span class="hint tabnum" id="titleSizeVal">132 px</span></label>
+              <input id="titleSize" type="range" min="80" max="170" value="132" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="chk"><input type="checkbox" id="kenburns" checked> Zoom lent sur les photos (style « Fondu » seulement)</label>
+              <label class="chk"><input type="checkbox" id="shimmer" checked> Reflet occasionnel sur la 2e ligne du titre</label>
+              <label class="chk"><input type="checkbox" id="watermark" checked> Grandes lettres en filigrane</label>
+            </div>
+          </div>
+          <div class="card-footer"><button class="btn btn-ghost btn-sm" id="resetBtn">↺ Textes et réglages par défaut</button></div>
+        </div>
+        </section>
+      </div>
+    </div>
+
+    <nav class="mobile-tabs">
+      <button data-target="direct" class="active">▶<span>Direct</span></button>
+      <button data-target="photos">🖼️<span>Photos</span></button>
+      <button data-target="style">🎨<span>Réglages</span></button>
+      <button data-target="preview">👁️<span>Aperçu</span></button>
+    </nav>
+  </div>
+
+  <script>
+    const CHANNEL='debut-live', STATE_KEY='debut-live-state', DOCK_KEY='debut-live-dock';
+    const channel = ('BroadcastChannel' in window) ? new BroadcastChannel(CHANNEL) : null;
+    const $ = id => document.getElementById(id);
+    const statusEl=$('status'), preview=$('preview');
+    const toast = m => { statusEl.textContent=m; statusEl.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>statusEl.classList.remove('show'),2400); };
+
+    const DEFAULTS = { kicker:'Bienvenue', title1:'Semaine de', title2:'Prière', subtitle:'Vivre dans la société',
+      speaker:'Pasteur RANDRIANARIVONY Herimanitra', footerText:'Bienvenue à toutes et à tous.', footR:'UAZ',
+      brandL1:'Université Adventiste', brandL2:'Zurcher', countdownLabel:'Le direct commence dans', wmText:'UAZ',
+      interval:'7', titleSize:'132', kenburns:true, shimmer:true, watermark:true, photoMode:'scroll', perView:'2', speed:'45', detailMode:'text', detailDate:'' };
+    const TEXT=['detailMode','detailDate','kicker','title1','title2','subtitle','speaker','footerText','footR','brandL1','brandL2','countdownLabel','wmText','interval','titleSize','photoMode','perView','speed'];
+    const CHECK=['kenburns','shimmer','watermark'];
+    let seq=0, photosRev=0, countdownEnd=0;
+
+    const config = () => { const c={}; TEXT.forEach(f=>c[f]=$(f).value); CHECK.forEach(f=>c[f]=$(f).checked);
+      c.interval=Number(c.interval); c.titleSize=Number(c.titleSize); c.speed=Number(c.speed); c.perView=Number(c.perView); return c; };
+    const send = () => { const st={ config:config(), seq, photosRev, countdownEnd };
+      try { localStorage.setItem(STATE_KEY, JSON.stringify(st)); } catch(e) { toast('⚠️ Stockage plein : '+e.message); }
+      if (channel) channel.postMessage(st); save(); };
+    const save = () => { const o={}; TEXT.forEach(f=>o[f]=$(f).value); CHECK.forEach(f=>o[f]=$(f).checked);
+      try { localStorage.setItem(DOCK_KEY, JSON.stringify(o)); } catch(e){} };
+    const load = () => { let o={}; try { o=JSON.parse(localStorage.getItem(DOCK_KEY)||'{}'); } catch(e){}
+      TEXT.forEach(f=>$(f).value = o[f]!=null ? o[f] : DEFAULTS[f]); CHECK.forEach(f=>$(f).checked = o[f]!=null ? o[f] : DEFAULTS[f]);
+      try { const s=JSON.parse(localStorage.getItem(STATE_KEY)||'null'); if (s) { seq=s.seq||0; photosRev=s.photosRev||0; countdownEnd=Number(s.countdownEnd)||0; } } catch(e){} };
+
+    // ligne de détail : texte libre, date du jour (toujours à jour) ou date choisie
+    const frDate = d => d.toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+    const applyDetail = () => { const m=$('detailMode').value;
+      $('detailDate').hidden = m!=='pick'; $('speaker').readOnly = m!=='text';
+      let v=null;
+      if (m==='today') v=frDate(new Date());
+      else if (m==='pick') { const p=$('detailDate').value.split('-').map(Number); v = p.length===3 && p[0] ? frDate(new Date(p[0],p[1]-1,p[2])) : ''; }
+      if (v!==null && $('speaker').value!==v) { $('speaker').value=v; return true; } return false; };
+    ['detailMode','detailDate'].forEach(f=>{ $(f).addEventListener('input', applyDetail); $(f).addEventListener('change', applyDetail); });
+    // la date du jour suit le calendrier : à minuit elle se met à jour toute seule
+    setInterval(()=>{ if ($('detailMode').value==='today' && applyDetail()) send(); }, 30000);
+
+    // saisie : mise à jour en direct, avec un petit délai pour ne pas afficher chaque lettre
+    let typingT;
+    const QUICK=['interval','titleSize','photoMode','perView','speed'];     // réglages sans saisie de texte : envoi quasi immédiat
+    TEXT.forEach(f=>$(f).addEventListener('input', ()=>{ labels(); syncModeUi(); clearTimeout(typingT); typingT=setTimeout(send, QUICK.includes(f)?150:500); }));
+    CHECK.forEach(f=>$(f).addEventListener('change', send));
+    const labels = () => { $('intervalVal').textContent=$('interval').value+' s'; $('titleSizeVal').textContent=$('titleSize').value+' px'; $('speedVal').textContent=$('speed').value+' px/s'; };
+    // la vitesse n'a de sens qu'en défilement continu ; la durée par photo, qu'en « pas à pas » et « fondu » ; « photos visibles » pas en fondu
+    const syncModeUi = () => { const m=$('photoMode').value;
+      $('speedField').classList.toggle('hidden', m!=='scroll'); $('intervalField').classList.toggle('hidden', m==='scroll'); $('perViewField').classList.toggle('hidden', m==='fade'); };
+    $('replayBtn').addEventListener('click', ()=>{ seq++; send(); toast('↻ Animation rejouée.'); });
+    $('resetBtn').addEventListener('click', ()=>{ TEXT.forEach(f=>$(f).value=DEFAULTS[f]); CHECK.forEach(f=>$(f).checked=DEFAULTS[f]); applyDetail(); labels(); syncModeUi(); send(); toast('↺ Valeurs par défaut.'); });
+    // raccourcis de l'onglet Direct : importer des photos sans changer d'onglet ; aller gérer l'ordre
+    $('addBtn2').addEventListener('click', ()=>$('fileIn').click());
+    $('manageBtn').addEventListener('click', ()=>{ const t=document.querySelector('.mobile-tabs button[data-target="photos"]');
+      if (t && getComputedStyle(t.parentElement).display!=='none') t.click(); else $('thumbs').scrollIntoView({ behavior:'smooth', block:'start' }); });
+
+    // ---------- présentations enregistrées (textes réutilisables) ----------
+    const PRESET_KEY='debut-live-presets', PRESET_FIELDS=['detailMode','detailDate','kicker','title1','title2','subtitle','speaker','footerText','footR'];
+    const getPresets = () => { try { const a=JSON.parse(localStorage.getItem(PRESET_KEY)||'[]'); return Array.isArray(a)?a:[]; } catch(e){ return []; } };
+    const putPresets = a => { try { localStorage.setItem(PRESET_KEY, JSON.stringify(a)); return true; } catch(e){ toast('⚠️ Enregistrement impossible : '+e.message); return false; } };
+    const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const renderPresets = () => { const L=getPresets(), box=$('presets'); $('presetCount').textContent = L.length ? '· '+L.length : '';
+      if (!L.length) { box.innerHTML='<div class="none">Aucune pour l\'instant. Remplis les champs ci-dessous, donne un nom, puis « Enregistrer ».</div>'; return; }
+      box.innerHTML='';
+      L.forEach((p,i)=>{ const d=document.createElement('div'); d.className='preset';
+        const sum=[p.v.title1,p.v.title2].filter(Boolean).join(' ') || p.v.kicker || p.v.subtitle || '—';
+        d.innerHTML='<div class="pt" title="Charger"><div class="pn">'+esc(p.name)+'</div><div class="pd">'+esc(sum)+'</div></div><button class="btn btn-outline btn-sm" data-a="load">Charger</button><button class="btn btn-ghost btn-sm" data-a="del" title="Supprimer">✕</button>';
+        const load1=()=>{ PRESET_FIELDS.forEach(f=>{ $(f).value = p.v[f]!=null ? p.v[f] : (DEFAULTS[f]!=null ? DEFAULTS[f] : ''); }); applyDetail(); $('presetName').value=p.name; seq++; send(); toast('✓ « '+p.name+' » chargée.'); };
+        onTap(d.querySelector('.pt'), load1);
+        onTap(d.querySelector('[data-a=load]'), load1);
+        onTap(d.querySelector('[data-a=del]'), ()=>{ if (!confirm('Supprimer « '+p.name+' » ?')) return; const A=getPresets(); A.splice(i,1); if (putPresets(A)) { renderPresets(); toast('Supprimée.'); } });
+        box.appendChild(d); }); };
+    // tap fiable (souris et tactile) : pointerdown puis pointerup au même endroit
+    function onTap(el, fn) { let x=0,y=0,t=0,on=false;
+      el.addEventListener('pointerdown', e=>{ on=true; x=e.clientX; y=e.clientY; t=Date.now(); });
+      el.addEventListener('pointerup', e=>{ if (on && Math.hypot(e.clientX-x,e.clientY-y)<10 && Date.now()-t<1500) fn(e); on=false; });
+      el.addEventListener('pointercancel', ()=>{ on=false; }); }
+    const savePreset = () => { const v={}; PRESET_FIELDS.forEach(f=>v[f]=$(f).value);
+      let name=$('presetName').value.trim() || [v.title1,v.title2].filter(Boolean).join(' ').trim() || v.kicker.trim() || v.subtitle.trim();
+      if (!name) { toast('Remplis au moins un champ ou donne un nom.'); return; }
+      const L=getPresets(), i=L.findIndex(p=>p.name.toLowerCase()===name.toLowerCase());
+      if (i>=0) { if (!confirm('« '+L[i].name+' » existe déjà. La remplacer ?')) return; L[i]={ name:L[i].name, v, at:Date.now() }; }
+      else L.unshift({ name, v, at:Date.now() });
+      if (putPresets(L)) { $('presetName').value=name; renderPresets(); toast('💾 « '+name+' » enregistrée.'); } };
+    onTap($('presetSave'), savePreset);
+    $('presetName').addEventListener('keydown', e=>{ if (e.key==='Enter') { e.preventDefault(); savePreset(); } });
+
+    // ---------- compte à rebours ----------
+    const fmt = ms => { const s=Math.ceil(ms/1000), h=Math.floor(s/3600), m=Math.floor(s%3600/60), ss=String(s%60).padStart(2,'0');
+      return (h?h+':'+String(m).padStart(2,'0'):String(m).padStart(2,'0'))+':'+ss; };
+    const renderCd = () => { const left=countdownEnd-Date.now(), el=$('cdView');
+      if (countdownEnd && left>0) { el.className='cd'; el.textContent=fmt(left); } else { el.className='cd off'; el.textContent=countdownEnd ? 'Terminé — la phrase du bas est revenue' : 'Aucun compte à rebours'; } };
+    setInterval(renderCd, 250);
+    document.querySelectorAll('[data-min]').forEach(b=>b.addEventListener('click', ()=>{ countdownEnd=Date.now()+Number(b.dataset.min)*60000; send(); renderCd(); toast('⏱ Compte à rebours : '+b.dataset.min+' min.'); }));
+    $('cdAtBtn').addEventListener('click', ()=>{ const v=$('cdAt').value; if(!v){ toast('Choisis une heure.'); return; }
+      const [h,m]=v.split(':').map(Number), d=new Date(); d.setHours(h,m,0,0); if (d<=new Date()) d.setDate(d.getDate()+1);
+      countdownEnd=d.getTime(); send(); renderCd(); toast('⏱ Jusqu\'à '+v+'.'); });
+    $('cdStop').addEventListener('click', ()=>{ countdownEnd=0; send(); renderCd(); toast('Compte à rebours arrêté.'); });
+
+    // ---------- photos (IndexedDB partagé avec la scène) ----------
+    const DEFAULT_PHOTOS=['photos-debut/chorale-1.jpg','photos-debut/chorale-2.jpg','photos-debut/chorale-3.jpg'];
+    const db = () => new Promise((res,rej)=>{ const r=indexedDB.open('debut-live-db',1); r.onupgradeneeded=()=>r.result.createObjectStore('kv'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+    const getPhotos = async () => { try { const d=await db(); return await new Promise(res=>{ const q=d.transaction('kv').objectStore('kv').get('photos'); q.onsuccess=()=>res(q.result||[]); q.onerror=()=>res([]); }); } catch(e){ return []; } };
+    const setPhotos = async list => { const d=await db(); await new Promise((res,rej)=>{ const t=d.transaction('kv','readwrite'); t.objectStore('kv').put(list,'photos'); t.oncomplete=res; t.onerror=()=>rej(t.error); });
+      photosRev++; send(); renderThumbs(); };
+    // photo redimensionnée (1600 px max, JPEG) pour rester légère
+    const toData = file => new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>{ const img=new Image(); img.onload=()=>{
+      const k=Math.min(1, 1600/Math.max(img.width,img.height)), c=document.createElement('canvas'); c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height); res(c.toDataURL('image/jpeg',.86)); }; img.onerror=()=>rej(new Error('image illisible')); img.src=r.result; }; r.readAsDataURL(file); });
+    const renderThumbs = async () => { const list=await getPhotos(), wrap=$('thumbs');
+      const items = list.length ? list.map(p=>p.data) : DEFAULT_PHOTOS;
+      $('photoInfo').textContent = list.length ? list.length+' photo(s) dans le diaporama.' : 'Photos par défaut (chorale). Ajoute les tiennes : elles s\'ajoutent à celles-ci.';
+      $('shortInfo').textContent = '· ' + (list.length || DEFAULT_PHOTOS.length) + ' photo(s)';
+      wrap.innerHTML='';
+      items.forEach((src,i)=>{ const t=document.createElement('div'); t.className='thumb';
+        t.innerHTML='<img alt=""><span class="n">'+(i+1)+'</span>'+(list.length?'<div class="tools"><button title="Avancer" data-a="up">◀</button><button title="Reculer" data-a="down">▶</button><button title="Retirer" data-a="del">✕</button></div>':'');
+        t.querySelector('img').src=src;
+        t.querySelectorAll('button').forEach(b=>b.addEventListener('click', async ()=>{ const L=await getPhotos(), a=b.dataset.a;
+          if (a==='del') L.splice(i,1); else { const j=a==='up'?i-1:i+1; if (j<0||j>=L.length) return; [L[i],L[j]]=[L[j],L[i]]; }
+          await setPhotos(L); }));
+        wrap.appendChild(t); }); };
+    $('addBtn').addEventListener('click', ()=>$('fileIn').click());
+    $('fileIn').addEventListener('change', async e=>{ const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
+      toast('Préparation de '+files.length+' photo(s)…');
+      const L=await getPhotos();
+      // 1er ajout : on garde les photos de la chorale (retirables une à une) au lieu de les remplacer
+      if (!L.length) DEFAULT_PHOTOS.forEach(p=>L.push({ id:p, data:p }));
+      for (const f of files) { try { L.push({ id:Date.now()+'-'+Math.random().toString(36).slice(2,7), data:await toData(f) }); } catch(err){ toast('⚠️ '+f.name+' : '+err.message); } }
+      try { await setPhotos(L); toast('✓ '+files.length+' photo(s) ajoutée(s).'); } catch(err) { toast('⚠️ Enregistrement impossible : '+err.message); } });
+    $('defBtn').addEventListener('click', async ()=>{ if (!confirm('Revenir aux photos par défaut (les photos ajoutées seront retirées) ?')) return; await setPhotos([]); toast('↺ Photos par défaut.'); });
+
+    // ---------- voyant de connexion ----------
+    const checkLink = () => { let t=0; try { t=Number(localStorage.getItem('debut-live-ping'))||0; } catch(e){}
+      const ok=Date.now()-t<6000, el=$('link'); el.className='link '+(ok?'ok':'ko');
+      $('linkTxt').innerHTML = ok ? 'Scène OBS connectée' : '<b>Scène OBS non détectée.</b> La source « DEBUT LIVE » doit être dans la scène affichée, en mode URL (« Fichier local » décoché) : <code>file:///C:/Users/harylala/Documents/HTML%20OVERLAY/debut-live.html</code>'; };
+    setInterval(checkLink, 2000);
+
+    // ---------- aperçu + onglets ----------
+    const scalePreview = () => { const fr=preview.parentElement; if(fr&&fr.clientWidth>0){ preview.style.transform='scale('+(fr.clientWidth/1920)+')'; fr.style.height=(fr.clientWidth*9/16)+'px'; } };
+    window.addEventListener('resize', scalePreview);
+    if ('ResizeObserver' in window) new ResizeObserver(scalePreview).observe(preview.parentElement);
+    preview.addEventListener('load', scalePreview);
+    document.querySelectorAll('.mobile-tabs button').forEach(btn=>btn.addEventListener('click',()=>{
+      const t=btn.dataset.target;
+      document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===t));
+      document.querySelectorAll('.mobile-tabs button').forEach(b=>b.classList.toggle('active',b===btn));
+      scalePreview(); }));
+
+    load(); applyDetail(); labels(); syncModeUi(); send(); renderPresets(); renderCd(); renderThumbs(); checkLink();
+    preview.src='debut-live.html?preview=1'; scalePreview();
+  </script>
+</body>
+</html>

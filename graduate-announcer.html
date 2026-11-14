@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Graduate Announcer</title>
+  <style>
+    :root {
+      --accent: #b08d4f;
+      --card-start: #123a8f;   /* haut de la bande */
+      --card-end:   #0a2258;   /* bas de la bande */
+      --name-size: 46px;
+      --degree-size: 22px;
+      --eyebrow-size: 14px;
+      --mention-size: 15px;
+      --year-size: 104px;
+      --white: #ffffff;
+    }
+
+    html, body {
+      width: 100%; height: 100%; margin: 0;
+      overflow: hidden; background: transparent;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    .stage {
+      position: absolute; inset: 0;
+      display: flex; align-items: flex-end;
+    }
+
+    /* Bande pleine largeur, en bas */
+    .bar {
+      position: relative; width: 100%;
+      display: flex; align-items: center; gap: 40px;
+      padding: 22px 70px;
+      background: linear-gradient(180deg, var(--card-start), var(--card-end));
+      color: var(--white);
+      box-shadow: 0 -10px 34px rgba(0, 0, 0, 0.38);
+      overflow: hidden;
+      transform: translateY(105%);
+      will-change: transform;
+    }
+    /* Liseré d'accent en haut, qui se déploie */
+    .bar::before {
+      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--accent), rgba(176,141,79,0) 55%);
+      transform: scaleX(0); transform-origin: left;
+      transition: transform .8s cubic-bezier(.16,.84,.2,1) .15s;
+    }
+    /* Reflet qui balaie une fois */
+    .sheen {
+      position: absolute; top: 0; bottom: 0; width: 22%; left: -30%;
+      background: linear-gradient(100deg, transparent, rgba(255,255,255,0.10), transparent);
+      transform: skewX(-18deg); pointer-events: none;
+    }
+
+    .stage.is-visible .bar {
+      transform: translateY(0);
+      transition: transform .75s cubic-bezier(.16,.84,.2,1);
+    }
+    .stage.is-visible .bar::before { transform: scaleX(1); }
+    .stage.is-visible .sheen { animation: sheen 1.2s ease .4s 1 both; }
+    .stage.is-hiding .bar {
+      transform: translateY(105%);
+      transition: transform .5s cubic-bezier(.4,0,.7,.2);
+    }
+    @keyframes sheen { from { left: -30%; } to { left: 130%; } }
+
+    /* Logo optionnel à gauche */
+    .logo {
+      flex: 0 0 auto; height: var(--logo-size, 74px); width: auto; object-fit: contain;
+      filter: drop-shadow(0 4px 10px rgba(0,0,0,0.45));
+    }
+    .logo[src=""] , .logo.hidden { display: none; }
+
+    /* Bloc texte */
+    .content {
+      flex: 1 1 auto; min-width: 0;
+      display: flex; flex-direction: column; gap: 5px;
+      align-items: flex-start; text-align: left;
+    }
+
+    .line { opacity: 0; transform: translateY(14px); will-change: transform, opacity; }
+    .stage.is-visible .line { animation: rise .6s cubic-bezier(.18,.9,.22,1) both; }
+    .stage.is-visible .eyebrow { animation-delay: .16s; }
+    .stage.is-visible .name    { animation-delay: .26s; }
+    .stage.is-visible .degree  { animation-delay: .38s; }
+    .stage.is-visible .mention { animation-delay: .48s; }
+    @keyframes rise {
+      0%   { opacity: 0; transform: translateY(14px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+
+    .eyebrow {
+      font-size: var(--eyebrow-size); letter-spacing: 0.18em;
+      color: var(--accent); font-weight: 700;
+    }
+    .name {
+      font-size: var(--name-size); font-weight: 800;
+      letter-spacing: 0.01em; line-height: 1.03; white-space: nowrap;
+      text-shadow: 0 3px 10px rgba(0,0,0,0.35);
+    }
+    .degree { font-size: var(--degree-size); color: rgba(255,255,255,0.90); font-weight: 400; }
+    .meta-row { display: flex; gap: 14px; align-items: center; margin-top: 3px; }
+    .mention {
+      font-size: var(--mention-size); font-weight: 600; color: var(--accent);
+      border: 1px solid var(--accent); border-radius: 999px; padding: 3px 13px;
+    }
+    .line:empty { display: none; }
+
+    /* Année, à droite — style géométrique deux tons (coupe diagonale) */
+    .year {
+      flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end;
+      font-family: "Arial Black", "Segoe UI", Impact, sans-serif;
+      font-weight: 900; letter-spacing: -0.03em; line-height: 1;
+      font-size: var(--year-size);
+      opacity: 0; transform: translateY(14px);
+      filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
+    }
+    .year span {
+      display: block; text-align: right;
+      /* padding = agrandit la zone peinte pour ne PAS rogner les chiffres (bas + droite) */
+      padding: 0.04em 0.08em 0.06em;
+      -webkit-background-clip: text; background-clip: text;
+      color: transparent; -webkit-text-fill-color: transparent;
+      background-repeat: no-repeat;
+      background-size: 250% 100%, 100% 100%;   /* couche vague large + couche base */
+      background-position: 180% 0, 0 0;
+      animation: yearWave 3.2s linear infinite;
+    }
+    /* couche 1 = vague lumineuse qui balaie ; couche 2 = coupe diagonale deux tons */
+    .year .y1 {
+      background-image:
+        linear-gradient(100deg, transparent 38%, rgba(255,255,255,0.65) 50%, transparent 62%),
+        linear-gradient(122deg, #8ef2ee 0 47%, #33a6da 47% 100%);
+    }
+    .year .y2 {
+      background-image:
+        linear-gradient(100deg, transparent 38%, rgba(255,255,255,0.65) 50%, transparent 62%),
+        linear-gradient(122deg, #33a6da 0 53%, #14459c 53% 100%);
+      margin-top: -0.32em;     /* empile "26" sous "20" en compensant la line-height */
+      animation-delay: .35s;   /* décalage -> la vague descend d'une ligne à l'autre */
+    }
+    @keyframes yearWave {
+      0%   { background-position: 180% 0, 0 0; }
+      100% { background-position: -90% 0, 0 0; }
+    }
+    .stage.is-visible .year { animation: rise .6s cubic-bezier(.18,.9,.22,1) .12s both; }
+    .year:empty, .year.hidden { display: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .bar, .line, .year, .year span { transition: none !important; animation: none !important;
+        opacity: 1 !important; transform: none !important; }
+      .bar::before { transform: scaleX(1) !important; }
+      .stage.is-hiding .bar { transform: translateY(105%) !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage" data-pos="left">
+    <div class="bar" id="card">
+      <img class="logo" id="logo" src="Logo%20SPARK.png" alt="SPARK" onerror="this.classList.add('hidden')">
+      <div class="content">
+        <div class="line eyebrow" id="eyebrow"></div>
+        <div class="line name" id="name">—</div>
+        <div class="line degree" id="degree"></div>
+        <div class="meta-row"><span class="line mention" id="mention"></span></div>
+      </div>
+      <div class="year" id="year"><span class="y1">20</span><span class="y2">26</span></div>
+      <span class="sheen"></span>
+    </div>
+  </div>
+
+  <script src="overlay-stack.js"></script>
+  <script>
+    // URL STATIQUE : dans OBS -> file:///…/graduate-announcer.html
+    // Piloté par le dock via localStorage (BroadcastChannel + storage + polling 300 ms).
+    const CHANNEL = 'graduate-announcer';
+    const STATE_KEY = 'ga-current-v2';   // { data, style, visible, seq, action }
+    const stage = document.getElementById('stage');
+    const nameEl = document.getElementById('name');
+    const yearEl = document.getElementById('year');
+    const root = document.documentElement;
+
+    const TEXT = { eyebrow: 'eyebrow', name: 'name', degree: 'degree', mention: 'mention' };
+    const VARS = {
+      accent: '--accent',
+      cardStart: '--card-start',
+      cardEnd: '--card-end',
+      nameSize: '--name-size',
+      degreeSize: '--degree-size',
+      eyebrowSize: '--eyebrow-size',
+      mentionSize: '--mention-size',
+      logoSize: '--logo-size'
+    };
+    const logoEl = document.getElementById('logo');
+    const DEFAULT_LOGO = 'Logo%20SPARK.png';
+    const setLogo = (v) => {
+      if (!logoEl) return;
+      if (v === '') { logoEl.classList.add('hidden'); return; }
+      logoEl.classList.remove('hidden');
+      logoEl.src = (v && v.length) ? v : DEFAULT_LOGO;
+    };
+
+    let currentDuration = 0; // 0 = reste affiché jusqu'à "Masquer"
+    let hideTimer = null;
+
+    // Le nom reste sur UNE ligne ; s'il dépasse la largeur dispo, sa police se réduit
+    // juste ce qu'il faut (jamais de coupure ni de retour à la ligne).
+    const fitName = () => {
+      nameEl.style.fontSize = '';
+      let size = parseFloat(getComputedStyle(nameEl).fontSize) || 46;
+      let guard = 0;
+      while (nameEl.scrollWidth > nameEl.clientWidth + 1 && size > 18 && guard < 120) {
+        size -= 1; nameEl.style.fontSize = size + 'px'; guard++;
+      }
+    };
+
+    const setYear = (y) => {
+      y = (y == null ? '' : String(y)).trim();
+      if (!y) { yearEl.classList.add('hidden'); return; }
+      yearEl.classList.remove('hidden');
+      const y1 = yearEl.querySelector('.y1'), y2 = yearEl.querySelector('.y2');
+      if (y.length === 4) { y1.textContent = y.slice(0, 2); y2.textContent = y.slice(2); }
+      else { y1.textContent = y; y2.textContent = ''; }
+    };
+
+    const applyData = (d) => {
+      if (!d) return;
+      for (const [k, id] of Object.entries(TEXT)) {
+        if (d[k] != null) document.getElementById(id).textContent = d[k];
+      }
+      fitName();
+    };
+
+    const applyStyle = (s) => {
+      if (!s) return;
+      for (const [k, cssVar] of Object.entries(VARS)) {
+        if (s[k] != null && s[k] !== '') root.style.setProperty(cssVar, s[k]);
+      }
+      if (s.year != null) setYear(s.year);
+      if (s.logo !== undefined) setLogo(s.logo);
+      if (s.position) stage.setAttribute('data-pos', s.position);
+      if (s.duration != null && s.duration !== '') {
+        const n = Number(s.duration);
+        if (Number.isFinite(n)) currentDuration = n;
+      }
+      fitName();
+    };
+
+    const scheduleHide = () => {
+      clearTimeout(hideTimer);
+      if (Number.isFinite(currentDuration) && currentDuration > 0) {
+        hideTimer = setTimeout(hide, currentDuration * 1000);
+      }
+    };
+
+    function show() {
+      clearTimeout(hideTimer);
+      fitName();
+      stage.classList.remove('is-hiding', 'is-visible');
+      void stage.offsetWidth; // relance les animations
+      stage.classList.add('is-visible');
+      scheduleHide();
+    }
+
+    function hide() {
+      clearTimeout(hideTimer);
+      stage.classList.remove('is-visible');
+      stage.classList.add('is-hiding');
+    }
+
+    window.addEventListener('resize', fitName);
+    if (document.getElementById('logo')) document.getElementById('logo').addEventListener('load', fitName);
+
+    // ---- Mode URL autonome (secours) : ?name=…&degree=… ----
+    const params = new URLSearchParams(location.search);
+    const STYLE_PARAMS = ['accent', 'cardStart', 'cardEnd', 'nameSize', 'degreeSize', 'eyebrowSize', 'mentionSize', 'year', 'logoSize', 'position', 'duration'];
+    const DATA_PARAMS = ['eyebrow', 'name', 'degree', 'mention'];
+    const hasConfigParams = [...STYLE_PARAMS, ...DATA_PARAMS].some((k) => params.has(k));
+    const forceShow = params.get('preview') === '1';
+
+    if (hasConfigParams) {
+      const style = {}, data = {};
+      STYLE_PARAMS.forEach((k) => { if (params.has(k)) style[k] = params.get(k); });
+      DATA_PARAMS.forEach((k) => { if (params.has(k)) data[k] = params.get(k); });
+      applyStyle(style); applyData(data);
+      setTimeout(show, 40);
+    } else {
+      // ---- Mode état partagé (URL statique) ----
+      const readState = () => {
+        try { return JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); }
+        catch (e) { return null; }
+      };
+
+      let lastSeq = null;
+      let lastKey = '';
+
+      const applyState = (s) => {
+        if (!s) return;
+        const k = JSON.stringify({ data: s.data, style: s.style });
+        if (k !== lastKey) { applyStyle(s.style); applyData(s.data); lastKey = k; }
+        if (s.seq !== lastSeq) {
+          lastSeq = s.seq;
+          if (s.action === 'show' || (s.action == null && s.visible)) show();
+          else if (s.action === 'hide') hide();
+        }
+      };
+
+      const init = readState();
+      if (init) {
+        applyStyle(init.style); applyData(init.data);
+        lastKey = JSON.stringify({ data: init.data, style: init.style });
+        lastSeq = init.seq;
+        if (forceShow || init.visible) setTimeout(show, 50);
+      } else if (forceShow) {
+        setTimeout(show, 50);
+      }
+
+      if ('BroadcastChannel' in window) {
+        const ch = new BroadcastChannel(CHANNEL);
+        ch.onmessage = (e) => applyState(e.data);
+      }
+      window.addEventListener('storage', (e) => { if (e.key === STATE_KEY) applyState(readState()); });
+      setInterval(() => applyState(readState()), 300);
+    }
+
+    // ---- Pile d'overlays : publie l'espace occupé en bas (barre pleine largeur) ----
+    if (window.OverlayStack && !forceShow) {
+      OverlayStack.registerPublisher('announcer', () => {
+        const card = document.getElementById('card');
+        if (!stage.classList.contains('is-visible')) return 0;   // masqué ou en cours de masquage
+        return card.offsetHeight / window.innerHeight;           // hauteur de bande / hauteur écran
+      }, 500);
+    }
+  </script>
+</body>
+</html>

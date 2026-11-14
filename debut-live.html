@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Début du direct — Scène</title>
+  <style>
+    /* Scène d'ouverture animée (plein écran, opaque).
+       OBS : Source Navigateur 1920×1080, mode URL -> file:///C:/Users/harylala/Documents/HTML%20OVERLAY/debut-live.html
+       Pilotée par debut-live-dock.html (localStorage + BroadcastChannel + polling ; photos dans IndexedDB). */
+    @font-face { font-family:"Inter"; font-weight:400; font-display:swap; src:url("fonts/inter-latin-400-normal.woff2") format("woff2"); }
+    @font-face { font-family:"Inter"; font-weight:600; font-display:swap; src:url("fonts/inter-latin-600-normal.woff2") format("woff2"); }
+    @font-face { font-family:"Inter"; font-weight:700; font-display:swap; src:url("fonts/inter-latin-700-normal.woff2") format("woff2"); }
+    @font-face { font-family:"Inter"; font-weight:800; font-display:swap; src:url("fonts/inter-latin-800-normal.woff2") format("woff2"); }
+
+    :root {
+      --navy-1:#1f2f78; --navy-2:#16246a; --navy-3:#0f1b55;
+      --accent:#14c3d6; --soft:#b9c3e8; --line:rgba(255,255,255,.14);
+      --title-size:132px;
+      --ease:cubic-bezier(.16,1,.3,1);
+    }
+    html, body { margin:0; width:1920px; height:1080px; overflow:hidden; }
+    body { font-family:"Inter","Segoe UI",Arial,sans-serif; color:#fff; -webkit-font-smoothing:antialiased;
+      background:linear-gradient(135deg, var(--navy-1) 0%, var(--navy-2) 45%, var(--navy-3) 100%); }
+
+    /* ---------- ambiance : lumière douce qui dérive lentement ---------- */
+    .glow { position:absolute; width:1100px; height:1100px; border-radius:50%; left:-260px; top:-380px; pointer-events:none;
+      background:radial-gradient(circle, rgba(70,110,230,.22) 0%, rgba(70,110,230,0) 62%); animation:glow 26s ease-in-out infinite alternate; }
+    @keyframes glow { from { transform:translate(0,0); } to { transform:translate(420px,520px); } }
+
+    /* ---------- colonne photos (carrousel en 3 cases) ---------- */
+    .photos { position:absolute; left:1040px; top:0; width:880px; height:1080px; overflow:hidden; background:#0b1442; }
+    .slot { position:absolute; left:0; width:880px; overflow:hidden; background:#0b1442; }
+    .slot.s0 { top:0; height:274px; } .slot.s1 { top:277px; height:521px; } .slot.s2 { top:801px; height:279px; }
+    .slot img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; will-change:opacity, transform;
+      transition:opacity 1.6s ease; }
+    .slot img.show { opacity:1; }
+    .kb .slot img.show { animation:kb var(--kb-dur, 9s) linear both; }
+    @keyframes kb { from { transform:scale(1.08) translate(-1.2%, .6%); } to { transform:scale(1) translate(0,0); } }
+
+    /* ---------- diaporama vertical : une bande de photos qui défile de HAUT EN BAS ----------
+       La bande contient les photos deux fois de suite ; elle glisse d'exactement une « période » puis recommence :
+       la boucle est invisible. (Modes : continu = mouvement constant · pas à pas = une photo à la fois.) */
+    .reel { position:absolute; inset:0; overflow:hidden; display:none; }
+    .mode-scroll .reel, .mode-step .reel { display:block; }
+    .mode-scroll .slot, .mode-step .slot { display:none; }
+    .reel-track { position:absolute; left:0; top:0; width:880px; display:flex; flex-direction:column; gap:var(--gap, 6px);
+      will-change:transform; transform:translate3d(0, calc(-1 * var(--cycle, 0px)), 0); }
+    .reel-track img { display:block; flex:0 0 auto; width:880px; height:var(--frame-h, 537px); object-fit:cover; background:#0b1442; }
+    .mode-scroll .reel-track { animation:reel var(--dur, 40s) linear infinite; }
+    @keyframes reel { from { transform:translate3d(0, calc(-1 * var(--cycle)), 0); } to { transform:translate3d(0, 0, 0); } }
+    .in .reel { animation:reelIn 1.2s var(--ease) .4s both; }
+    @keyframes reelIn { from { clip-path:inset(0 0 100% 0); } to { clip-path:inset(0 0 0 0); } }
+    /* fondu de la colonne vers le bleu, côté texte */
+    .photos::after { content:""; position:absolute; inset:0; pointer-events:none;
+      background:linear-gradient(90deg, var(--navy-2) 0%, rgba(22,36,106,.72) 12%, rgba(22,36,106,.18) 30%, rgba(22,36,106,0) 46%),
+                 linear-gradient(0deg, rgba(12,22,72,.82) 0%, rgba(12,22,72,.45) 9%, rgba(15,27,85,0) 24%); }
+    /* filigrane UAZ */
+    .wm { position:absolute; left:40px; top:-30px; display:flex; flex-direction:column; line-height:.86; pointer-events:none; z-index:2;
+      font-weight:800; font-size:370px; color:transparent; -webkit-text-stroke:2px rgba(255,255,255,.13); letter-spacing:-.02em;
+      animation:wm 30s ease-in-out infinite alternate; }
+    @keyframes wm { from { transform:translateY(0); } to { transform:translateY(-60px); } }
+    .no-wm .wm { display:none; }
+
+    /* ---------- colonne texte ---------- */
+    .topbar { position:absolute; left:96px; top:0; width:128px; height:6px; background:var(--accent); transform-origin:left; }
+    .brand { position:absolute; left:116px; top:60px; display:flex; align-items:center; gap:52px; }
+    .seal { width:94px; height:94px; object-fit:contain; filter:drop-shadow(0 6px 18px rgba(0,0,0,.35)); opacity:0; }
+    .b1 { font-size:22px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; }
+    .b2 { font-size:32px; font-weight:700; color:var(--accent); margin-top:4px; }
+    .rule { position:absolute; left:96px; height:1px; background:var(--line); transform-origin:left; }
+    .rule.r1 { top:208px; width:880px; } .rule.r2 { top:943px; width:1824px; }
+    .kicker { position:absolute; left:96px; top:296px; display:flex; align-items:center; gap:18px; }
+    .kicker-line { width:56px; height:3px; background:var(--accent); transform-origin:left; }
+    .kicker-txt { font-size:18px; font-weight:700; letter-spacing:.27em; color:var(--accent); text-transform:uppercase; }
+    .title { position:absolute; left:92px; top:362px; width:900px; }
+    .tl { display:block; overflow:hidden; padding:0 8px 6px 4px; margin-bottom:-14px; }
+    .tl > span { display:inline-block; font-size:var(--title-size); font-weight:800; line-height:1.06; letter-spacing:-.035em;
+      text-transform:uppercase; white-space:nowrap; }
+    .tl.t2 > span { color:var(--accent); }
+    .sub { position:absolute; left:96px; top:686px; font-size:35px; font-weight:400; letter-spacing:-.005em; }
+    .speaker { position:absolute; left:96px; top:752px; font-size:24px; font-weight:400; color:var(--soft); }
+    .foot-l { position:absolute; left:96px; top:974px; font-size:21px; color:#c6cdec; font-variant-numeric:tabular-nums; }
+    .foot-l b { color:#fff; font-weight:700; margin-left:6px; }
+    .foot-r { position:absolute; right:126px; top:976px; display:flex; align-items:center; gap:18px;
+      font-size:18px; font-weight:700; letter-spacing:.3em; color:var(--accent); z-index:3; text-shadow:0 1px 8px rgba(5,12,40,.9); }
+    .foot-r::before { content:""; width:40px; height:2px; background:var(--accent); }
+
+    /* reflet occasionnel sur la 2e ligne du titre */
+    /* Le dégradé fait 3× la largeur du mot et ne se déplace qu'entre 100 % et 0 % :
+       il couvre TOUJOURS tout le mot (sinon les lettres non couvertes deviennent transparentes). */
+    .shimmer .tl.t2 > span { background:linear-gradient(100deg, var(--accent) 0 44%, #c9f7fc 50%, var(--accent) 56% 100%) 100% 0/300% 100% no-repeat;
+      -webkit-background-clip:text; background-clip:text; color:transparent; animation:shine 9s ease-in-out 3s infinite; }
+    @keyframes shine { 0%, 65% { background-position:100% 0; } 100% { background-position:0% 0; } }
+
+    /* ---------- ENTRÉE chorégraphiée (classe .in sur body) ---------- */
+    .a { opacity:0; }
+    .in .a { animation:fadeUp .9s var(--ease) both; }
+    @keyframes fadeUp { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:none; } }
+    .in .topbar { animation:grow .8s var(--ease) .05s both; }
+    .in .seal   { animation:seal 1.1s var(--ease) .2s both; }
+    @keyframes seal { from { opacity:0; transform:scale(.82) rotate(-10deg); } to { opacity:1; transform:none; } }
+    .in .brand-t { animation:fadeRight .9s var(--ease) .35s both; }
+    @keyframes fadeRight { from { opacity:0; transform:translateX(-16px); } to { opacity:1; transform:none; } }
+    .in .rule.r1 { animation:grow 1.2s var(--ease) .5s both; }
+    .in .kicker-line { animation:grow .7s var(--ease) .7s both; }
+    .in .kicker-txt { animation:track 1s var(--ease) .75s both; }
+    @keyframes track { from { opacity:0; letter-spacing:.6em; } to { opacity:1; letter-spacing:.27em; } }
+    .in .tl > span { animation:rise 1s var(--ease) both; }
+    .in .tl.t1 > span { animation-delay:.85s; } .in .tl.t2 > span { animation-delay:1s; }
+    @keyframes rise { from { transform:translateY(105%); } to { transform:none; } }
+    .shimmer.in .tl.t2 > span { animation:rise 1s var(--ease) 1s both, shine 9s ease-in-out 4s infinite; }
+    .in .sub { animation-delay:1.25s; } .in .speaker { animation-delay:1.38s; }
+    .in .rule.r2 { animation:grow 1.4s var(--ease) 1.45s both; }
+    .in .foot-l { animation-delay:1.65s; } .in .foot-r { animation-delay:1.75s; }
+    .in .photos { animation:photosIn 1.3s var(--ease) .15s both; }
+    @keyframes photosIn { from { opacity:0; transform:translateX(70px); } to { opacity:1; transform:none; } }
+    .in .slot { animation:slotIn 1.1s var(--ease) both; }
+    .in .slot.s0 { animation-delay:.35s; } .in .slot.s1 { animation-delay:.5s; } .in .slot.s2 { animation-delay:.65s; }
+    @keyframes slotIn { from { clip-path:inset(0 0 100% 0); } to { clip-path:inset(0 0 0 0); } }
+    .rule, .topbar, .kicker-line { transform:scaleX(0); }
+    @keyframes grow { from { transform:scaleX(0); } to { transform:scaleX(1); } }
+    .tl > span { transform:translateY(105%); }
+    .photos { opacity:0; }
+
+    /* changement de texte en direct : fondu */
+    .swap { transition:opacity .25s ease; }
+    .swap.out { opacity:0 !important; }
+
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition:none !important; } }
+  </style>
+</head>
+<body class="kb">
+  <div class="glow"></div>
+
+  <div class="photos" id="photos">
+    <div class="slot s0"><img alt=""><img alt=""></div>
+    <div class="slot s1"><img alt=""><img alt=""></div>
+    <div class="slot s2"><img alt=""><img alt=""></div>
+    <div class="reel"><div class="reel-track" id="reelTrack"></div></div>
+    <div class="wm" id="wm"><span>U</span><span>A</span><span>Z</span></div>
+  </div>
+
+  <div class="topbar"></div>
+  <div class="brand">
+    <img class="seal" src="UAZ%20Official.png" alt="">
+    <div class="brand-t a">
+      <div class="b1 swap" id="brandL1">Université Adventiste</div>
+      <div class="b2 swap" id="brandL2">Zurcher</div>
+    </div>
+  </div>
+  <div class="rule r1"></div>
+
+  <div class="kicker"><span class="kicker-line"></span><span class="kicker-txt a swap" id="kicker">Bienvenue</span></div>
+  <div class="title" id="title">
+    <span class="tl t1"><span class="swap" id="title1">Semaine de</span></span>
+    <span class="tl t2"><span class="swap" id="title2">Prière</span></span>
+  </div>
+  <div class="sub a swap" id="subtitle">Vivre dans la société</div>
+  <div class="speaker a swap" id="speaker">Pasteur RANDRIANARIVONY Herimanitra</div>
+
+  <div class="rule r2"></div>
+  <div class="foot-l a" id="footL"><span class="swap" id="footTxt">Bienvenue à toutes et à tous.</span></div>
+  <div class="foot-r a swap" id="footR">UAZ</div>
+
+  <script>
+    const CHANNEL='debut-live', STATE_KEY='debut-live-state';
+    const DEFAULT_PHOTOS=['photos-debut/chorale-1.jpg','photos-debut/chorale-2.jpg','photos-debut/chorale-3.jpg'];
+    const $=id=>document.getElementById(id), body=document.body, root=document.documentElement;
+
+    // ---------- textes (fondu quand ils changent après l'entrée) ----------
+    const TEXTS=['brandL1','brandL2','kicker','title1','title2','subtitle','speaker','footR'];
+    let firstApply=true;
+    const setText=(id,v)=>{ const el=$(id); v=v??''; if (el.textContent===v) return;
+      if (firstApply) { el.textContent=v; return; }
+      el.classList.add('out'); setTimeout(()=>{ el.textContent=v; el.classList.remove('out'); if(id.startsWith('title')) fitTitle(); }, 260); };
+    // le titre tient toujours dans la colonne (880 px) : police réduite si besoin
+    const fitTitle=()=>{ root.style.setProperty('--title-size', (cfg.titleSize||132)+'px');
+      let s=cfg.titleSize||132, g=0;
+      const wide=()=>Math.max($('title1').scrollWidth,$('title2').scrollWidth);
+      while (wide()>880 && s>60 && g<80) { s-=2; root.style.setProperty('--title-size', s+'px'); g++; } };
+
+    let cfg={};
+    const applyConfig=c=>{ if(!c) return; cfg=c;
+      TEXTS.forEach(k=>{ if (c[k]!=null) setText(k, c[k]); });
+      body.classList.toggle('kb', c.kenburns!==false);
+      body.classList.toggle('shimmer', c.shimmer!==false);
+      body.classList.toggle('no-wm', c.watermark===false);
+      if (c.wmText!=null) $('wm').innerHTML=String(c.wmText||'').split('').map(ch=>'<span>'+ch.replace(/[<>&]/g,'')+'</span>').join('');
+      root.style.setProperty('--kb-dur', ((Number(c.interval)||7)+2)+'s');
+      applyModeClass();     // dès le départ : bonne zone photo (bande verticale ou 3 cases), sans clignotement
+      if (firstApply) fitTitle();
+      firstApply=false;
+    };
+
+    // ---------- compte à rebours (heure absolue : insensible aux rechargements OBS) ----------
+    let countdownEnd=0, lastFoot='';
+    const tick=()=>{
+      let html;
+      const left=countdownEnd-Date.now();
+      if (countdownEnd && left>0) {
+        const s=Math.ceil(left/1000), m=Math.floor(s/60), ss=String(s%60).padStart(2,'0');
+        html=(cfg.countdownLabel||'Le direct commence dans')+'<b>'+(m>=60?Math.floor(m/60)+':'+String(m%60).padStart(2,'0'):String(m).padStart(2,'0'))+':'+ss+'</b>';
+      } else html=(cfg.footerText??'Bienvenue à toutes et à tous.').replace(/[<>&]/g,'');
+      if (html!==lastFoot) { const el=$('footTxt'), wasCount=/<b>/.test(lastFoot), isCount=/<b>/.test(html);
+        if (lastFoot && wasCount!==isCount) { el.classList.add('out'); setTimeout(()=>{ el.innerHTML=html; el.classList.remove('out'); }, 260); }
+        else el.innerHTML=html;
+        lastFoot=html; }
+    };
+    setInterval(tick, 250);
+
+    // ---------- photos : IndexedDB (ajoutées depuis le dock), sinon photos par défaut ----------
+    const idbPhotos=()=>new Promise(res=>{ try { const r=indexedDB.open('debut-live-db',1);
+      r.onupgradeneeded=()=>r.result.createObjectStore('kv');
+      r.onsuccess=()=>{ try { const q=r.result.transaction('kv').objectStore('kv').get('photos'); q.onsuccess=()=>res(q.result||null); q.onerror=()=>res(null); } catch(e){ res(null); } };
+      r.onerror=()=>res(null); } catch(e){ res(null); } });
+    let pool=DEFAULT_PHOTOS.slice(), cursor=0, timers=[];
+    const slots=[...document.querySelectorAll('.slot')].map(el=>({ el, imgs:[...el.querySelectorAll('img')], front:0, cur:null }));
+    const nextPhoto=avoid=>{ for (let k=0;k<pool.length;k++){ const u=pool[cursor++%pool.length]; if (pool.length<=slots.length || !avoid.includes(u)) return u; } return pool[0]; };
+    const showIn=(s,url)=>{ const back=s.imgs[1-s.front], front=s.imgs[s.front];
+      const go=()=>{ back.classList.remove('show'); void back.offsetWidth; back.classList.add('show'); front.classList.remove('show'); s.front=1-s.front; s.cur=url; };
+      if (back.src && back.getAttribute('data-u')===url && back.complete) return go();
+      back.onload=go; back.onerror=()=>{}; back.setAttribute('data-u',url); back.src=url; };
+    const startCarousel=()=>{
+      timers.forEach(clearTimeout); timers.forEach(clearInterval); timers=[]; cursor=0;
+      slots.forEach(s=>showIn(s, nextPhoto(slots.map(x=>x.cur))));
+      const every=(Number(cfg.interval)||7)*1000;
+      // les 3 cases changent en décalé (jamais toutes en même temps)
+      slots.forEach((s,i)=>{ timers.push(setTimeout(()=>{ const t=setInterval(()=>showIn(s, nextPhoto(slots.map(x=>x.cur))), every); timers.push(t);
+        showIn(s, nextPhoto(slots.map(x=>x.cur))); }, every*(1+i/slots.length))); });
+    };
+    // ----- diaporama vertical (modes « scroll » continu et « step » pas à pas) -----
+    const track=$('reelTrack'), GAP=6;
+    let stepTimer=null, stepIdx=0, buildId=0;
+    const photoMode=()=>['scroll','step','fade'].includes(cfg.photoMode) ? cfg.photoMode : 'scroll';
+    const applyModeClass=()=>{ const m=photoMode(); ['scroll','step','fade'].forEach(x=>body.classList.toggle('mode-'+x, x===m)); };
+    // hauteur d'une photo : 1, 2 ou 3 photos visibles à la fois (2 = la colonne est exactement remplie)
+    const frameH=()=>{ const n=Math.max(1,Math.min(3,Number(cfg.perView)||2)); return Math.floor((1080-(n-1)*GAP)/n); };
+    const buildReel=async()=>{
+      const my=++buildId; clearInterval(stepTimer); stepTimer=null; stepIdx=0;
+      const base=pool.length ? pool : DEFAULT_PHOTOS, fh=frameH(), unit=fh+GAP;
+      let seq=[]; while (seq.length*unit < 1080+fh || seq.length<2) seq=seq.concat(base);   // assez long pour ne jamais montrer de vide
+      const cycle=seq.length*unit;
+      track.style.animation='none'; track.style.transition='none'; track.style.transform='';
+      track.innerHTML='';
+      const imgs=[...seq,...seq].map(u=>{ const im=new Image(); im.alt=''; im.src=u; track.appendChild(im); return im; });
+      root.style.setProperty('--frame-h', fh+'px'); root.style.setProperty('--gap', GAP+'px'); root.style.setProperty('--cycle', cycle+'px');
+      root.style.setProperty('--dur', (cycle/Math.max(10, Number(cfg.speed)||45))+'s');
+      // on attend que les photos soient décodées : sinon elles « apparaissent d'un coup » en entrant par le haut
+      await Promise.all(imgs.map(im=>im.decode ? im.decode().catch(()=>{}) : Promise.resolve()));
+      if (my!==buildId) return;                       // une reconstruction plus récente a pris la main
+      void track.offsetWidth; track.style.animation='';
+      if (photoMode()==='step') {
+        track.style.transform='translate3d(0,'+(-cycle)+'px,0)';
+        const every=(Number(cfg.interval)||7)*1000;
+        stepTimer=setInterval(()=>{ stepIdx++;
+          track.style.transition='transform 1.4s cubic-bezier(.65,0,.35,1)';
+          track.style.transform='translate3d(0,'+(-cycle+stepIdx*unit)+'px,0)';          // la bande descend d'une photo
+          if (stepIdx>=seq.length) setTimeout(()=>{ track.style.transition='none'; track.style.transform='translate3d(0,'+(-cycle)+'px,0)'; stepIdx=0; }, 1500);
+        }, every);
+      } else { track.style.transition=''; track.style.transform=''; }
+    };
+    let layoutSig='';
+    const layoutPhotos=()=>{
+      applyModeClass();
+      layoutSig=[photoMode(), cfg.perView, cfg.speed, cfg.interval].join('|');
+      timers.forEach(clearTimeout); timers.forEach(clearInterval); timers=[];
+      if (photoMode()==='fade') { clearInterval(stepTimer); startCarousel(); } else buildReel();
+    };
+    const loadPhotos=async()=>{ const list=await idbPhotos();
+      pool = (Array.isArray(list) && list.length) ? list.map(p=>p.data) : DEFAULT_PHOTOS.slice();
+      layoutPhotos(); };
+
+    // ---------- état partagé ----------
+    let lastSeq=null, lastRev=null;
+    const replay=()=>{ body.classList.remove('in'); void body.offsetWidth; body.classList.add('in'); };
+    const applyState=s=>{ if(!s) return;
+      applyConfig(s.config);
+      countdownEnd=Number(s.countdownEnd)||0;
+      if (s.photosRev!==lastRev) { lastRev=s.photosRev; loadPhotos(); }
+      else if ([photoMode(), cfg.perView, cfg.speed, cfg.interval].join('|')!==layoutSig) layoutPhotos();
+      if (s.seq!==lastSeq) { const first=lastSeq===null; lastSeq=s.seq; if(!first) replay(); }
+    };
+    const readState=()=>{ try { return JSON.parse(localStorage.getItem(STATE_KEY)||'null'); } catch(e){ return null; } };
+
+    // démarrage : on joue l'entrée (OBS rejoue la page quand la scène devient active)
+    const init=readState();
+    if (init) { applyConfig(init.config); countdownEnd=Number(init.countdownEnd)||0; lastSeq=init.seq; lastRev=init.photosRev; }
+    else applyConfig({});
+    loadPhotos(); tick();
+    (document.fonts ? document.fonts.ready : Promise.resolve()).then(()=>{ fitTitle(); requestAnimationFrame(()=>body.classList.add('in')); });
+
+    if ('BroadcastChannel' in window) { const ch=new BroadcastChannel(CHANNEL); ch.onmessage=e=>applyState(e.data); }
+    window.addEventListener('storage', e=>{ if (e.key===STATE_KEY) applyState(readState()); });
+    setInterval(()=>applyState(readState()), 400);
+    // présence (voyant « connecté » du dock) — pas pour l'aperçu
+    if (new URLSearchParams(location.search).get('preview')!=='1') { const ping=()=>{ try{ localStorage.setItem('debut-live-ping', String(Date.now())); }catch(e){} }; ping(); setInterval(ping,2000); }
+  </script>
+</body>
+</html>

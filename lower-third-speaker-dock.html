@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lower Third — Régie</title>
+  <link rel="stylesheet" href="dock-ui.css">
+  <style>
+    .preview-frame { position: relative; overflow: hidden; }
+    #preview { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; transform-origin: top left; border: 0; }
+
+    .mobile-tabs { display: none; }
+
+    @media (max-width: 880px) {
+      body { padding: 0; }
+      .mobile-app { display: flex; flex-direction: column; height: 100dvh; }
+      .page-header { padding: 10px 14px; margin: 0; gap: 8px; border-bottom: 1px solid hsl(var(--border)); }
+      .page-header h1 { font-size: 16px; }
+      .page-header .desc { display: none; }
+      .app-grid { flex: 1; min-height: 0; display: block; position: relative; gap: 0; }
+      .app-grid > .col { display: contents; }
+      .panel { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px; display: none; }
+      .panel.active { display: block; }
+      .card { box-shadow: none; border-radius: 12px; }
+
+      .panel[data-panel="direct"].active { display: flex; flex-direction: column; padding-bottom: 0; }
+      .panel[data-panel="direct"] .card { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+      .panel[data-panel="direct"] .card-content { flex: 1; min-height: 0; }
+      .queue-field { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+      .queue-field .list { flex: 1; min-height: 0; max-height: none; }
+
+      .mobile-tabs {
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        background: hsl(var(--card)); border-top: 1px solid hsl(var(--border));
+        padding-bottom: env(safe-area-inset-bottom, 0);
+      }
+      .mobile-tabs button {
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+        padding: 9px 4px; background: none; border: 0; cursor: pointer;
+        color: hsl(var(--muted-foreground)); font: inherit; font-size: 17px; line-height: 1;
+      }
+      .mobile-tabs button span { font-size: 10.5px; font-weight: 500; }
+      .mobile-tabs button.active { color: hsl(var(--brand)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container mobile-app">
+    <div class="page-header">
+      <h1>📺 Lower Third — intervenants</h1>
+      <span class="desc">Précharge tes intervenants, puis affiche-les en direct.</span>
+      <span class="badge badge-off" id="onair" style="margin-left:auto">● Hors antenne</span>
+    </div>
+
+    <div class="app-grid">
+      <div class="col">
+        <section class="panel active" data-panel="direct">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">▶ Direct</div>
+            <div class="card-description">Clique un intervenant, ou utilise les boutons / flèches clavier.</div>
+          </div>
+          <div class="card-content">
+            <div class="row between">
+              <span class="badge badge-secondary tabnum" id="counter">0 / 0</span>
+              <span class="muted text-xs"><kbd>←</kbd> <kbd>→</kbd> défiler · <kbd>Échap</kbd> masquer</span>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-outline" id="prevBtn">◀ Précédent</button>
+              <button class="btn btn-brand" id="nextBtn">Suivant ▶</button>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" id="showBtn">Afficher</button>
+              <button class="btn btn-secondary" id="hideBtn">Masquer</button>
+            </div>
+            <hr class="separator">
+            <div class="field queue-field">
+              <div class="label">Intervenants</div>
+              <div class="list" id="list"></div>
+            </div>
+            <div class="status" id="status"></div>
+          </div>
+        </div>
+        </section>
+
+        <section class="panel" data-panel="list">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📋 Liste des intervenants</div>
+            <div class="card-description">Un par ligne : <b>Nom | Rôle | Détails</b>. Les deux derniers champs sont optionnels.</div>
+          </div>
+          <div class="card-content">
+            <div class="field">
+              <textarea class="input" id="listInput" spellcheck="false" placeholder="Rabenamana Hary Lala | Développeur | IT - Université Adventiste Zurcher
+Pasteur Andriamana | Orateur invité | Église Adventiste
+Dr. Rakoto | Doyen | Faculté de Théologie"></textarea>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-secondary btn-sm" id="reloadBtn">Recharger la liste</button>
+              <button class="btn btn-ghost btn-sm" id="clearBtn">Vider</button>
+            </div>
+          </div>
+        </div>
+        </section>
+      </div>
+
+      <div class="col">
+        <section class="panel" data-panel="preview">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">👁️ Aperçu</div>
+            <div class="card-description">Rendu en temps réel de l'overlay.</div>
+          </div>
+          <div class="card-content">
+            <div class="preview-frame"><iframe id="preview" title="Aperçu lower third"></iframe></div>
+          </div>
+        </div>
+        </section>
+
+        <section class="panel" data-panel="style">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🎨 Apparence</div>
+          </div>
+          <div class="card-content">
+            <div class="field">
+              <label class="label" for="surtitle">Sur-titre <span class="hint">optionnel · au-dessus du rôle</span></label>
+              <input class="input" id="surtitle" type="text" placeholder="ex : CÉRÉMONIE SPARK 2026" value="">
+            </div>
+            <div class="field">
+              <label class="label" for="duration">Durée (s) <span class="hint">0 = permanent (reste jusqu'à « Masquer »)</span></label>
+              <input class="input" id="duration" type="number" value="0" min="0" max="60">
+            </div>
+            <div class="grid-3">
+              <div class="field">
+                <label class="label" for="accent">Accent</label>
+                <input class="color" id="accent" type="color" value="#b08d4f">
+              </div>
+              <div class="field">
+                <label class="label" for="barStart">Fond haut</label>
+                <input class="color" id="barStart" type="color" value="#123a8f">
+              </div>
+              <div class="field">
+                <label class="label" for="barEnd">Fond bas</label>
+                <input class="color" id="barEnd" type="color" value="#0a2258">
+              </div>
+            </div>
+            <hr class="separator">
+            <div class="field">
+              <label class="label" for="roleSize">Taille rôle <span class="hint tabnum" id="roleSizeVal">16 px</span></label>
+              <input id="roleSize" type="range" min="10" max="28" value="16" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="nameSize">Taille du nom <span class="hint tabnum" id="nameSizeVal">40 px</span></label>
+              <input id="nameSize" type="range" min="24" max="64" value="40" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="detailsSize">Taille détails <span class="hint tabnum" id="detailsSizeVal">20 px</span></label>
+              <input id="detailsSize" type="range" min="12" max="32" value="20" style="width:100%">
+            </div>
+            <hr class="separator">
+            <div class="field">
+              <label class="label" for="logoOpacity">Opacité logo (fond animé) <span class="hint tabnum" id="logoOpacityVal">12 %</span></label>
+              <input id="logoOpacity" type="range" min="0" max="60" value="12" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label">Logo (filigrane) <span class="hint">image de fond</span></label>
+              <div class="row" style="gap:8px; flex-wrap:wrap">
+                <input type="file" id="logoFile" accept="image/*" style="display:none">
+                <button type="button" class="btn btn-secondary btn-sm" id="logoPick">📁 Choisir…</button>
+                <button type="button" class="btn btn-outline btn-sm" id="logoDefault">Logo SPARK</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="logoNone">Sans logo</button>
+              </div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <button class="btn btn-outline btn-sm" id="copyBtn">📋 Copier l'URL overlay</button>
+            <button class="btn btn-ghost btn-sm" id="resetBtn">↺ Réinitialiser le style</button>
+          </div>
+        </div>
+        </section>
+      </div>
+    </div>
+
+    <nav class="mobile-tabs">
+      <button data-target="direct" class="active">🎬<span>Direct</span></button>
+      <button data-target="list">📋<span>Liste</span></button>
+      <button data-target="style">🎨<span>Style</span></button>
+      <button data-target="preview">👁️<span>Aperçu</span></button>
+    </nav>
+  </div>
+
+  <script>
+    const CHANNEL = 'lower-third';
+    const CURRENT_KEY = 'lt-state-v2';   // { config, visible, seq, action } lu par l'overlay
+    const DOCK_KEY = 'lt-dock-v2';       // état du dock (liste, index, réglages)
+    const channel = ('BroadcastChannel' in window) ? new BroadcastChannel(CHANNEL) : null;
+
+    // ---- Exclusivité mutuelle avec l'annonceur : afficher l'un masque l'autre ----
+    const SOLO_KEY = 'overlay-solo', MY_ID = 'lower-third';
+    const soloCh = ('BroadcastChannel' in window) ? new BroadcastChannel(SOLO_KEY) : null;
+    const announceSolo = () => { const m = { owner: MY_ID, ts: Date.now() }; localStorage.setItem(SOLO_KEY, JSON.stringify(m)); if (soloCh) soloCh.postMessage(m); };
+    const onSolo = (m) => { if (m && m.owner && m.owner !== MY_ID && visible) hideOverlay(); };
+    if (soloCh) soloCh.onmessage = (e) => onSolo(e.data);
+    window.addEventListener('storage', (e) => { if (e.key === SOLO_KEY && e.newValue) { try { onSolo(JSON.parse(e.newValue)); } catch (_) {} } });
+
+    const $ = (id) => document.getElementById(id);
+    const preview = $('preview');
+    const statusEl = $('status');
+    const onair = $('onair');
+
+    const styleFields = ['surtitle', 'duration', 'accent', 'barStart', 'barEnd', 'roleSize', 'nameSize', 'detailsSize', 'logoOpacity'];
+    const sizeFields = ['roleSize', 'nameSize', 'detailsSize'];
+
+    let speakers = [];
+    let index = 0;
+    let visible = false;
+    let seq = 0;
+    let logoData = null;   // null = logo par défaut · '' = sans logo · data:URI = logo choisi
+
+    const folderUrl = () => {
+      const p = location.pathname;
+      return 'file:///' + p.substring(0, p.lastIndexOf('/') + 1).replace(/\\/g, '/');
+    };
+    const baseUrl = folderUrl() + 'lower-third-speaker.html';
+
+    // "Nom | Rôle | Détails"
+    const parseList = (text) => text.split('\n')
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('#'))
+      .map(line => {
+        const [name = '', role = '', details = ''] = line.split('|').map(s => s.trim());
+        return { name, role, details };
+      });
+
+    const buildConfig = () => {
+      const g = speakers[index] || { name: '—', role: '', details: '' };
+      return {
+        surtitle: $('surtitle').value,
+        role: g.role || '',
+        name: g.name || '—',
+        details: g.details || '',
+        logo: logoData,
+        accent: $('accent').value,
+        barStart: $('barStart').value,
+        barEnd: $('barEnd').value,
+        roleSize: $('roleSize').value + 'px',
+        nameSize: $('nameSize').value + 'px',
+        detailsSize: $('detailsSize').value + 'px',
+        logoOpacity: (Number($('logoOpacity').value) / 100).toString(),
+        duration: $('duration').value.trim()
+      };
+    };
+
+    const send = (action) => {
+      const config = buildConfig();
+      const state = { config, visible, seq, action };
+      localStorage.setItem(CURRENT_KEY, JSON.stringify(state));
+      saveDock();
+      if (channel) channel.postMessage(state);
+    };
+
+    const setVisible = (v) => {
+      visible = v;
+      onair.className = 'badge ' + (v ? 'badge-live' : 'badge-off');
+      onair.innerHTML = v ? '<span class="dot"></span> En direct' : '● Hors antenne';
+      onair.style.marginLeft = 'auto';
+    };
+
+    const showCurrent = () => { setVisible(true); seq++; send('show'); announceSolo(); renderList(); toast('▶ ' + (speakers[index]?.name || '—') + ' — en direct.'); };
+    const hideOverlay  = () => { setVisible(false); seq++; send('hide'); toast('■ Overlay masqué.'); };
+    const updateSilently = () => { send('update'); renderList(); };
+
+    const goTo = (i, andShow = true) => {
+      if (!speakers.length) return;
+      index = (i + speakers.length) % speakers.length;
+      if (andShow) showCurrent(); else updateSilently();
+    };
+    const next = () => goTo(index + 1, true);
+    const prev = () => goTo(index - 1, true);
+
+    const escapeHtml = (s) => (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    const renderList = () => {
+      const list = $('list');
+      $('counter').textContent = (speakers.length ? index + 1 : 0) + ' / ' + speakers.length;
+      if (!speakers.length) {
+        list.innerHTML = '<div class="muted text-sm" style="padding:10px">Aucun intervenant. Colle la liste dans l\'onglet « Liste ».</div>';
+        return;
+      }
+      list.innerHTML = '';
+      speakers.forEach((g, i) => {
+        const row = document.createElement('button');
+        row.className = 'list-row' + (i === index ? ' is-current' : '');
+        row.innerHTML =
+          '<span class="idx">' + (i + 1) + '</span>' +
+          '<span class="primary">' + escapeHtml(g.name) + '</span>' +
+          '<span class="sub">' + escapeHtml(g.details || '') + '</span>';
+        row.addEventListener('click', () => goTo(i, true));
+        list.appendChild(row);
+      });
+      const cur = list.querySelector('.is-current');
+      if (cur) cur.scrollIntoView({ block: 'nearest' });
+    };
+
+    const saveDock = () => {
+      const style = Object.fromEntries(styleFields.map(f => [f, $(f).value]));
+      localStorage.setItem(DOCK_KEY, JSON.stringify({ listText: $('listInput').value, index, style, logo: logoData }));
+    };
+    const loadDock = () => {
+      try {
+        const s = JSON.parse(localStorage.getItem(DOCK_KEY) || '{}');
+        if (s.listText) $('listInput').value = s.listText;
+        if (s.style) styleFields.forEach(f => { if (s.style[f] != null) $(f).value = s.style[f]; });
+        if (s.logo !== undefined) logoData = s.logo;
+        speakers = parseList($('listInput').value);
+        index = Math.min(s.index || 0, Math.max(0, speakers.length - 1));
+      } catch (e) { speakers = parseList($('listInput').value); }
+    };
+
+    // ---- Logo (fichier -> data:URI, redimensionné) ----
+    const fileToLogo = (file) => {
+      const r = new FileReader();
+      r.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const maxH = 300, scale = Math.min(1, maxH / img.height);
+          const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
+          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          logoData = c.toDataURL('image/png');
+          updateSilently(); toast('🖼️ Logo mis à jour.');
+        };
+        img.onerror = () => toast('Image illisible.');
+        img.src = r.result;
+      };
+      r.readAsDataURL(file);
+    };
+    $('logoPick').addEventListener('click', () => $('logoFile').click());
+    $('logoFile').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) fileToLogo(f); e.target.value = ''; });
+    $('logoDefault').addEventListener('click', () => { logoData = null; updateSilently(); toast('Logo SPARK par défaut.'); });
+    $('logoNone').addEventListener('click', () => { logoData = ''; updateSilently(); toast('Sans logo.'); });
+
+    const toast = (msg) => {
+      statusEl.textContent = msg;
+      statusEl.classList.add('show');
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => statusEl.classList.remove('show'), 2600);
+    };
+
+    const refreshSizeLabels = () => {
+      sizeFields.forEach(f => {
+        const el = document.getElementById(f + 'Val');
+        if (el) el.textContent = $(f).value + ' px';
+      });
+      $('logoOpacityVal').textContent = $('logoOpacity').value + ' %';
+    };
+
+    // ---- Câblage ----
+    $('nextBtn').addEventListener('click', next);
+    $('prevBtn').addEventListener('click', prev);
+    $('showBtn').addEventListener('click', showCurrent);
+    $('hideBtn').addEventListener('click', hideOverlay);
+
+    $('reloadBtn').addEventListener('click', () => {
+      speakers = parseList($('listInput').value);
+      index = Math.min(index, Math.max(0, speakers.length - 1));
+      updateSilently();
+      toast('✓ ' + speakers.length + ' intervenant(s) chargé(s).');
+    });
+    $('clearBtn').addEventListener('click', () => {
+      $('listInput').value = ''; speakers = []; index = 0; updateSilently();
+    });
+
+    styleFields.forEach(f => {
+      $(f).addEventListener('input', () => {
+        refreshSizeLabels();
+        updateSilently();
+      });
+    });
+
+    $('copyBtn').addEventListener('click', () => {
+      navigator.clipboard.writeText(baseUrl)
+        .then(() => toast('📋 URL statique copiée — à coller UNE FOIS dans la source Navigateur OBS.'))
+        .catch(() => toast(baseUrl));
+    });
+    $('resetBtn').addEventListener('click', () => {
+      const defaults = { surtitle: '', duration: '0', accent: '#b08d4f', barStart: '#123a8f', barEnd: '#0a2258', roleSize: '16', nameSize: '40', detailsSize: '20', logoOpacity: '12' };
+      logoData = null;
+      Object.entries(defaults).forEach(([k, v]) => { $(k).value = v; });
+      refreshSizeLabels();
+      updateSilently();
+      toast('↺ Style réinitialisé.');
+    });
+
+    document.addEventListener('keydown', (e) => {
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+      else if (e.key === 'Escape') { e.preventDefault(); hideOverlay(); }
+      else if (e.key === ' ') { e.preventDefault(); visible ? hideOverlay() : showCurrent(); }
+    });
+
+    // ---- Aperçu fidèle : mise à l'échelle du 1920×1080 ----
+    const scalePreview = () => {
+      const frame = preview.parentElement;
+      if (!frame) return;
+      const w = frame.clientWidth;
+      if (w > 0) preview.style.transform = 'scale(' + (w / 1920) + ')';
+    };
+    window.addEventListener('resize', scalePreview);
+    if ('ResizeObserver' in window) new ResizeObserver(scalePreview).observe(preview.parentElement);
+    preview.addEventListener('load', scalePreview);
+
+    // ---- Onglets (téléphone) ----
+    document.querySelectorAll('.mobile-tabs button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.target;
+        document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.dataset.panel === target));
+        document.querySelectorAll('.mobile-tabs button').forEach((b) => b.classList.toggle('active', b === btn));
+        scalePreview();
+      });
+    });
+
+    // ---- Init ----
+    loadDock();
+    refreshSizeLabels();
+    try { const prev = JSON.parse(localStorage.getItem(CURRENT_KEY) || 'null'); if (prev && prev.seq) seq = prev.seq; } catch (e) {}
+    setVisible(false);
+    send('update');
+    preview.src = baseUrl + '?preview=1';
+    scalePreview();
+    renderList();
+  </script>
+</body>
+</html>

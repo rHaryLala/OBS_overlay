@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Régie — Multiview caméras</title>
+<style>
+  :root{
+    --bg:#0a0d13; --panel:#0f141d; --tile:#05070b; --line:#1e2836;
+    --txt:#e8edf5; --mut:#8a97ab; --accent:#12b981; --live:#ef4444; --warn:#f59e0b;
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+
+  /* ---------- Barre du haut ---------- */
+  .topbar{display:flex;align-items:center;gap:14px;padding:10px 16px;
+    background:linear-gradient(180deg,#121826,#0d121c);border-bottom:1px solid var(--line);
+    height:56px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.08em}
+  .brand .rec{width:11px;height:11px;border-radius:50%;background:var(--live);
+    box-shadow:0 0 0 0 rgba(239,68,68,.6);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.6)}70%{box-shadow:0 0 0 9px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
+  .brand small{font-weight:600;color:var(--mut);letter-spacing:.14em;font-size:11px}
+  .spacer{flex:1}
+  .stat{color:var(--mut);font-size:12.5px;display:flex;gap:6px;align-items:center}
+  .stat b{color:var(--txt);font-variant-numeric:tabular-nums}
+  .clock{font-variant-numeric:tabular-nums;font-weight:700;font-size:15px;letter-spacing:.05em}
+  .tbtn{display:inline-flex;align-items:center;gap:7px;background:#1a2231;border:1px solid var(--line);
+    color:var(--txt);padding:8px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
+  .tbtn:hover{background:#222c3e;border-color:#2c3a4f}
+  .tbtn.on{background:var(--accent);border-color:var(--accent);color:#04140d}
+  .tbtn svg{width:16px;height:16px}
+
+  /* ---------- Grille ---------- */
+  .wall{position:absolute;inset:56px 0 0 0;padding:12px;overflow:auto}
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(var(--cols,auto-fill),minmax(var(--min,340px),1fr))}
+  .grid.cols-auto{--cols:auto-fill}
+
+  .tile{position:relative;background:var(--tile);border:1px solid var(--line);border-radius:var(--radius);
+    overflow:hidden;aspect-ratio:16/9;cursor:pointer;transition:border-color .2s,transform .12s}
+  .tile:hover{border-color:#33465f}
+  .tile video{width:100%;height:100%;object-fit:cover;display:block;background:#000}
+  .tile.mirror video{transform:scaleX(-1)}
+  .tile .label{position:absolute;left:0;bottom:0;right:0;display:flex;align-items:center;gap:8px;
+    padding:8px 10px;background:linear-gradient(0deg,rgba(0,0,0,.82),rgba(0,0,0,0));
+    font-size:13px;font-weight:700;letter-spacing:.02em;pointer-events:none}
+  .tile .num{background:var(--accent);color:#04140d;border-radius:5px;padding:1px 7px;font-size:12px;font-weight:800}
+  .tile .res{margin-left:auto;color:var(--mut);font-weight:600;font-size:11px;font-variant-numeric:tabular-nums}
+  .tile .state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:10px;color:var(--mut);font-size:13px;text-align:center;padding:16px}
+  .tile .state.hidden{display:none}
+  .tile .spin{width:26px;height:26px;border:3px solid #22303f;border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .tile .mini{position:absolute;top:8px;right:8px;display:flex;gap:6px;opacity:0;transition:opacity .15s}
+  .tile:hover .mini{opacity:1}
+  .mini button{width:30px;height:30px;border-radius:7px;border:1px solid var(--line);background:rgba(10,14,22,.8);
+    color:var(--txt);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .mini button:hover{background:#222c3e}
+  .mini button svg{width:15px;height:15px}
+
+  /* ---------- Spotlight (agrandir une caméra) ---------- */
+  .grid.spot .tile{display:none}
+  .grid.spot .tile.active{display:block;position:fixed;inset:56px 0 0 0;aspect-ratio:auto;z-index:40;
+    border-radius:0;border:0}
+  .grid.spot .tile.active video{object-fit:contain;background:#000}
+
+  /* ---------- Panneau réglages ---------- */
+  .drawer{position:fixed;top:56px;right:0;bottom:0;width:340px;max-width:88vw;background:var(--panel);
+    border-left:1px solid var(--line);transform:translateX(100%);transition:transform .25s;z-index:60;
+    display:flex;flex-direction:column}
+  .drawer.open{transform:none}
+  .drawer h3{margin:0;padding:16px;border-bottom:1px solid var(--line);font-size:14px;letter-spacing:.04em}
+  .drawer .body{padding:12px 14px;overflow:auto;flex:1}
+  .drawer .hint{color:var(--mut);font-size:12px;line-height:1.5;margin:0 0 12px}
+  .dev{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid #141c28}
+  .dev input[type=checkbox]{width:17px;height:17px;accent-color:var(--accent);flex:0 0 auto}
+  .dev .nm{flex:1;min-width:0}
+  .dev .nm input{width:100%;background:#0b1017;border:1px solid var(--line);color:var(--txt);
+    border-radius:6px;padding:6px 8px;font-size:13px}
+  .dev .nm small{color:var(--mut);font-size:10.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+  .dev .mir{width:30px;height:30px;border-radius:6px;border:1px solid var(--line);background:#0b1017;color:var(--mut);cursor:pointer;flex:0 0 auto}
+  .dev .mir.on{color:var(--accent);border-color:var(--accent)}
+  .row{display:flex;align-items:center;gap:10px;margin:14px 0}
+  .row label{font-size:12.5px;color:var(--mut)}
+  .colsctl{display:flex;align-items:center;gap:6px;margin-left:auto}
+  .colsctl button{width:30px;height:30px;border-radius:6px;border:1px solid var(--line);background:#0b1017;color:var(--txt);cursor:pointer;font-weight:800}
+  .colsctl b{min-width:56px;text-align:center;font-size:12.5px}
+
+  /* ---------- Overlay permission ---------- */
+  .perm{position:fixed;inset:0;background:rgba(6,9,14,.94);display:flex;align-items:center;justify-content:center;z-index:80;padding:24px}
+  .perm.hidden{display:none}
+  .perm .card{max-width:520px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px;text-align:center}
+  .perm h2{margin:0 0 10px;font-size:20px}
+  .perm p{color:var(--mut);line-height:1.6;font-size:14px;margin:0 0 18px}
+  .perm button{background:var(--accent);color:#04140d;border:0;border-radius:9px;padding:12px 22px;font-size:15px;font-weight:800;cursor:pointer}
+  .perm .cam{font-size:44px;margin-bottom:8px}
+  .empty{position:absolute;inset:56px 0 0 0;display:flex;align-items:center;justify-content:center;color:var(--mut);text-align:center;padding:24px;font-size:14px;line-height:1.6}
+  .empty.hidden{display:none}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span class="rec"></span>RÉGIE <small>MULTIVIEW CAMÉRAS</small></div>
+    <div class="spacer"></div>
+    <div class="stat">Caméras <b id="cnt">0</b></div>
+    <div class="clock" id="clock">--:--:--</div>
+    <button class="tbtn" id="refreshBtn" title="Actualiser les caméras">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>Actualiser</button>
+    <button class="tbtn" id="fsBtn" title="Plein écran">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>Plein écran</button>
+    <button class="tbtn" id="setBtn" title="Réglages">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Réglages</button>
+  </div>
+
+  <div class="wall"><div class="grid cols-auto" id="grid"></div></div>
+  <div class="empty hidden" id="empty">Aucune caméra détectée.<br>Branche tes caméras / lance tes applis téléphone (DroidCam, iVCam, Camo…) puis clique « Actualiser ».</div>
+
+  <!-- Réglages -->
+  <aside class="drawer" id="drawer">
+    <h3>⚙️ Réglages du multiview</h3>
+    <div class="body">
+      <p class="hint">Coche les caméras à afficher, renomme-les pour coller à OBS, active un miroir si besoin.</p>
+      <div class="row"><label>Colonnes</label>
+        <div class="colsctl">
+          <button id="colMinus">−</button><b id="colVal">Auto</b><button id="colPlus">+</button>
+        </div>
+      </div>
+      <div id="devList"></div>
+    </div>
+  </aside>
+
+  <!-- Autorisation caméra -->
+  <div class="perm" id="perm">
+    <div class="card">
+      <div class="cam" id="permIcon">🎥</div>
+      <h2 id="permTitle">Autoriser l'accès aux caméras</h2>
+      <p id="permText">Cette page affiche en direct toutes tes caméras (webcams, captures, téléphones vus comme webcam).
+         Clique ci-dessous puis accepte la demande du navigateur. Rien n'est envoyé sur Internet — tout reste local.</p>
+      <button id="grantBtn">Activer les caméras</button>
+    </div>
+  </div>
+
+<script>
+const $=s=>document.querySelector(s);
+const grid=$('#grid'), devList=$('#devList');
+const LS='multiview-settings';
+let settings=load();               // {hidden:{}, names:{}, mirror:{}, cols:'auto'|number}
+let devices=[];                    // videoinput MediaDeviceInfo[]
+const streams=new Map();           // deviceId -> MediaStream
+const tiles=new Map();             // deviceId -> tile element
+
+function load(){ try{return Object.assign({hidden:{},names:{},mirror:{},cols:'auto'},JSON.parse(localStorage.getItem(LS)||'{}'));}catch(e){return{hidden:{},names:{},mirror:{},cols:'auto'};} }
+function save(){ try{localStorage.setItem(LS,JSON.stringify(settings));}catch(e){} }
+
+// ---------- Horloge ----------
+setInterval(()=>{ $('#clock').textContent=new Date().toLocaleTimeString('fr-FR'); },1000);
+
+// ---------- Vérif environnement (contexte sécurisé requis pour la caméra) ----------
+function envError(){
+  if(location.protocol==='file:')
+    return "Tu as ouvert le fichier directement (adresse « file:// »). Les navigateurs bloquent l'accès caméra dans ce mode.";
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+    return "Ton navigateur n'autorise pas l'accès caméra sur cette page (contexte non sécurisé).";
+  if(!window.isSecureContext)
+    return "Page non sécurisée. L'accès caméra exige « http://localhost » ou « https ».";
+  return null;
+}
+function showEnvHelp(msg){
+  $('#permIcon').textContent='🚫';
+  $('#permTitle').textContent='Ouvre la régie via le serveur local';
+  $('#permText').innerHTML = msg +
+    "<br><br><b>Solution (2 s) :</b> double-clique <b>« Régie caméras.bat »</b> dans le dossier — "+
+    "il ouvre la régie sur <b>http://localhost:8137/multiview.html</b>, où la caméra fonctionne.<br>"+
+    "<span style='color:var(--mut);font-size:12.5px'>Astuce : mets l'adresse en favori. À éviter : ouvrir le .html par double-clic.</span>";
+  const b=$('#grantBtn'); b.textContent='Recharger la page'; b.onclick=()=>location.reload();
+  $('#perm').classList.remove('hidden');
+}
+
+// ---------- Permission + démarrage ----------
+async function grant(){
+  const err=envError(); if(err){ showEnvHelp(err); return; }
+  try{ const s=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+    s.getTracks().forEach(t=>t.stop()); $('#perm').classList.add('hidden'); await refresh(); }
+  catch(e){
+    if(e.name==='NotAllowedError') alert("Accès caméra refusé.\nClique l'icône caméra dans la barre d'adresse du navigateur, choisis « Autoriser », puis recharge.");
+    else if(e.name==='NotFoundError') alert("Aucune caméra trouvée. Branche une caméra ou lance ton appli téléphone (DroidCam/iVCam/Camo), puis recharge.");
+    else alert('Accès caméra impossible : '+e.message);
+  }
+}
+$('#grantBtn').addEventListener('click', grant);
+
+// ---------- Détection & rendu ----------
+async function refresh(){
+  let list=[]; try{ list=await navigator.mediaDevices.enumerateDevices(); }catch(e){}
+  devices=list.filter(d=>d.kind==='videoinput' && d.deviceId);
+  // ferme les flux des périphériques disparus
+  for(const id of [...streams.keys()]) if(!devices.find(d=>d.deviceId===id)) closeDevice(id);
+  renderDevList();
+  renderGrid();
+}
+
+function nameOf(d,i){ return settings.names[d.deviceId] || d.label || ('Caméra '+(i+1)); }
+
+function renderGrid(){
+  const visible=devices.filter(d=>!settings.hidden[d.deviceId]);
+  $('#cnt').textContent=visible.length;
+  $('#empty').classList.toggle('hidden', devices.length>0);
+  // colonnes
+  grid.style.setProperty('--cols', settings.cols==='auto' ? 'auto-fill' : settings.cols);
+  grid.classList.toggle('cols-auto', settings.cols==='auto');
+
+  // retire les tuiles obsolètes
+  for(const [id,el] of [...tiles]) if(!visible.find(d=>d.deviceId===id)){ el.remove(); tiles.delete(id); closeDevice(id); }
+
+  visible.forEach((d,i)=>{
+    let el=tiles.get(d.deviceId);
+    if(!el){
+      el=document.createElement('div'); el.className='tile'; el.dataset.id=d.deviceId;
+      el.innerHTML=`<video autoplay muted playsinline></video>
+        <div class="state"><div class="spin"></div><span>Connexion…</span></div>
+        <div class="mini">
+          <button class="mir" title="Miroir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M6 8l-4 4 4 4M18 8l4 4-4 4"/></svg></button>
+          <button class="rt" title="Reconnecter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg></button>
+        </div>
+        <div class="label"><span class="num">${i+1}</span><span class="nm"></span><span class="res"></span></div>`;
+      el.addEventListener('click',ev=>{ if(ev.target.closest('.mini')) return; toggleSpot(d.deviceId); });
+      el.querySelector('.mir').addEventListener('click',()=>toggleMirror(d.deviceId));
+      el.querySelector('.rt').addEventListener('click',()=>{ closeDevice(d.deviceId); openDevice(d); });
+      grid.appendChild(el); tiles.set(d.deviceId,el);
+      openDevice(d);
+    }
+    el.querySelector('.num').textContent=i+1;
+    el.querySelector('.nm').textContent=nameOf(d,i);
+    el.classList.toggle('mirror', !!settings.mirror[d.deviceId]);
+    el.querySelector('.mir').classList.toggle('on', !!settings.mirror[d.deviceId]);
+  });
+}
+
+async function openDevice(d){
+  const el=tiles.get(d.deviceId); if(!el) return;
+  const v=el.querySelector('video'), st=el.querySelector('.state');
+  st.classList.remove('hidden'); st.innerHTML='<div class="spin"></div><span>Connexion…</span>';
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{
+      deviceId:{exact:d.deviceId}, width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:30}}});
+    streams.set(d.deviceId,stream); v.srcObject=stream;
+    v.onloadedmetadata=()=>{ st.classList.add('hidden');
+      const tr=stream.getVideoTracks()[0], s=tr&&tr.getSettings?tr.getSettings():{};
+      el.querySelector('.res').textContent=(s.width&&s.height)?`${s.width}×${s.height}`:'';
+    };
+    stream.getVideoTracks()[0].addEventListener('ended',()=>markLost(d));
+  }catch(e){
+    st.classList.remove('hidden');
+    st.innerHTML=`<span style="color:var(--warn);font-weight:700">Signal indisponible</span>
+      <span style="font-size:11.5px">${(e.name==='NotReadableError')?'Caméra déjà utilisée par une autre appli':e.message}</span>
+      <button class="tbtn" style="margin-top:4px" onclick="event.stopPropagation()">Réessayer</button>`;
+    st.querySelector('button').addEventListener('click',()=>openDevice(d));
+  }
+}
+function markLost(d){ const el=tiles.get(d.deviceId); if(!el)return; const st=el.querySelector('.state');
+  st.classList.remove('hidden'); st.innerHTML='<span style="color:var(--warn)">Signal perdu</span>'; }
+function closeDevice(id){ const s=streams.get(id); if(s){s.getTracks().forEach(t=>t.stop());streams.delete(id);} }
+
+// ---------- Spotlight ----------
+let spotId=null;
+function toggleSpot(id){
+  if(spotId===id){ spotId=null; grid.classList.remove('spot'); tiles.forEach(t=>t.classList.remove('active')); return; }
+  spotId=id; grid.classList.add('spot');
+  tiles.forEach((t,k)=>t.classList.toggle('active',k===id));
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&spotId) toggleSpot(spotId); });
+
+// ---------- Miroir ----------
+function toggleMirror(id){ settings.mirror[id]=!settings.mirror[id]; save(); renderGrid();
+  const l=[...devList.querySelectorAll('.mir')].find(b=>b.dataset.id===id); if(l) l.classList.toggle('on',!!settings.mirror[id]); }
+
+// ---------- Liste des périphériques (réglages) ----------
+function renderDevList(){
+  devList.innerHTML='';
+  if(!devices.length){ devList.innerHTML='<p class="hint">Aucune caméra. Branche/lance tes sources puis « Actualiser ».</p>'; return; }
+  devices.forEach((d,i)=>{
+    const row=document.createElement('div'); row.className='dev';
+    row.innerHTML=`<input type="checkbox" ${settings.hidden[d.deviceId]?'':'checked'}>
+      <div class="nm"><input type="text" value="${(nameOf(d,i)).replace(/"/g,'&quot;')}" placeholder="Nom de la caméra">
+        <small title="${(d.label||'').replace(/"/g,'&quot;')}">${d.label||'(périphérique '+(i+1)+')'}</small></div>
+      <button class="mir ${settings.mirror[d.deviceId]?'on':''}" data-id="${d.deviceId}" title="Miroir">⇋</button>`;
+    row.querySelector('input[type=checkbox]').addEventListener('change',e=>{
+      if(e.target.checked) delete settings.hidden[d.deviceId]; else settings.hidden[d.deviceId]=true; save(); renderGrid(); });
+    row.querySelector('input[type=text]').addEventListener('input',e=>{
+      settings.names[d.deviceId]=e.target.value; save();
+      const t=tiles.get(d.deviceId); if(t) t.querySelector('.nm').textContent=e.target.value||d.label; });
+    row.querySelector('.mir').addEventListener('click',()=>toggleMirror(d.deviceId));
+    devList.appendChild(row);
+  });
+}
+
+// ---------- Colonnes ----------
+function setCols(v){ settings.cols=v; save(); renderGrid();
+  $('#colVal').textContent=(v==='auto')?'Auto':v; }
+$('#colMinus').addEventListener('click',()=>{ let c=settings.cols; if(c==='auto')c=4; else c=Math.max(1,c-1); setCols(c); });
+$('#colPlus').addEventListener('click',()=>{ let c=settings.cols; if(c==='auto')c=1; else c=Math.min(8,c+1); if(c>=8)c=8; setCols(c); });
+$('#colVal').addEventListener('dblclick',()=>setCols('auto'));
+
+// ---------- Boutons barre ----------
+$('#refreshBtn').addEventListener('click',refresh);
+$('#setBtn').addEventListener('click',()=>$('#drawer').classList.toggle('open'));
+$('#fsBtn').addEventListener('click',()=>{ if(document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(()=>{}); });
+
+navigator.mediaDevices?.addEventListener?.('devicechange',refresh);
+
+// ---------- Init ----------
+$('#colVal').textContent=(settings.cols==='auto')?'Auto':settings.cols;
+(async()=>{
+  // environnement incompatible (file:// ou non sécurisé) -> aide immédiate
+  const err=envError(); if(err){ showEnvHelp(err); return; }
+  // si l'autorisation est déjà accordée, on démarre directement
+  try{ const p=await navigator.permissions?.query?.({name:'camera'}); if(p&&p.state==='granted'){ $('#perm').classList.add('hidden'); await refresh(); return; } }catch(e){}
+  // sinon on tente quand même : si des labels existent, permission ok
+  try{ const l=await navigator.mediaDevices.enumerateDevices(); if(l.some(d=>d.kind==='videoinput'&&d.label)){ $('#perm').classList.add('hidden'); await refresh(); return; } }catch(e){}
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Annonceur — Régie</title>
+  <link rel="stylesheet" href="dock-ui.css">
+  <style>
+    /* Aperçu fidèle : l'iframe est rendue en 1920×1080 puis mise à l'échelle du cadre */
+    .preview-frame { position: relative; overflow: hidden; }
+    #preview { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; transform-origin: top left; border: 0; }
+
+    .mobile-tabs { display: none; }
+
+    /* ---------- Mode téléphone : onglets en bas, pas de scroll de page ---------- */
+    @media (max-width: 880px) {
+      body { padding: 0; }
+      .mobile-app { display: flex; flex-direction: column; height: 100dvh; }
+      .page-header { padding: 10px 14px; margin: 0; gap: 8px; border-bottom: 1px solid hsl(var(--border)); }
+      .page-header h1 { font-size: 16px; }
+      .page-header .desc { display: none; }
+
+      .app-grid { flex: 1; min-height: 0; display: block; position: relative; gap: 0; }
+      .app-grid > .col { display: contents; }
+
+      .panel { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px; display: none; }
+      .panel.active { display: block; }
+      .card { box-shadow: none; border-radius: 12px; }
+      .card-content { gap: 12px; }
+
+      /* Onglet Direct : boutons fixes en haut, file d'attente qui remplit et défile seule */
+      .panel[data-panel="direct"].active { display: flex; flex-direction: column; padding-bottom: 0; }
+      .panel[data-panel="direct"] .card { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+      .panel[data-panel="direct"] .card-content { flex: 1; min-height: 0; }
+      .queue-field { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+      .queue-field .list { flex: 1; min-height: 0; max-height: none; }
+
+      .mobile-tabs {
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        background: hsl(var(--card)); border-top: 1px solid hsl(var(--border));
+        padding-bottom: env(safe-area-inset-bottom, 0);
+      }
+      .mobile-tabs button {
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+        padding: 9px 4px; background: none; border: 0; cursor: pointer;
+        color: hsl(var(--muted-foreground)); font: inherit; font-size: 17px; line-height: 1;
+      }
+      .mobile-tabs button span { font-size: 10.5px; font-weight: 500; }
+      .mobile-tabs button.active { color: hsl(var(--brand)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container mobile-app">
+    <div class="page-header">
+      <h1>🎓 Annonceur de diplômés</h1>
+      <span class="desc">Précharge la liste, puis fais défiler chaque nom en direct.</span>
+      <span class="badge badge-off" id="onair" style="margin-left:auto">● Hors antenne</span>
+    </div>
+
+    <div class="app-grid">
+      <!-- Colonne gauche : file d'attente + contrôles -->
+      <div class="col">
+        <section class="panel active" data-panel="direct">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">▶ Direct</div>
+            <div class="card-description">Clique un nom, ou utilise les boutons / flèches clavier.</div>
+          </div>
+          <div class="card-content">
+            <div class="row between">
+              <span class="badge badge-secondary tabnum" id="counter">0 / 0</span>
+              <span class="muted text-xs">
+                <kbd>←</kbd> <kbd>→</kbd> défiler · <kbd>Échap</kbd> masquer
+              </span>
+            </div>
+
+            <div class="btn-row">
+              <button class="btn btn-outline" id="prevBtn">◀ Précédent</button>
+              <button class="btn btn-brand" id="nextBtn">Suivant ▶</button>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" id="showBtn">Afficher</button>
+              <button class="btn btn-secondary" id="hideBtn">Masquer</button>
+            </div>
+
+            <hr class="separator">
+            <div class="field queue-field">
+              <div class="label">File d'attente</div>
+              <div class="list" id="list"></div>
+            </div>
+            <div class="status" id="status"></div>
+          </div>
+        </div>
+        </section>
+
+        <section class="panel" data-panel="list">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📋 Liste des diplômés</div>
+            <div class="card-description"><b>Liste SPARK 2026 déjà chargée</b> (110 diplômés, 10 filières). Un par ligne : <b>Nom | Diplôme | Parcours</b>. Les lignes <code>#</code> sont des repères. Tu peux tout modifier.</div>
+          </div>
+          <div class="card-content">
+            <div class="field">
+              <textarea class="input" id="listInput" spellcheck="false" placeholder="Rabenamana Hary Lala | Licence en Informatique | Système d'information
+Andrianina Soa | Master en Théologie"></textarea>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-secondary btn-sm" id="reloadBtn">Recharger la liste</button>
+              <button class="btn btn-outline btn-sm" id="officialBtn">🎓 Liste SPARK 2026</button>
+              <button class="btn btn-ghost btn-sm" id="clearBtn">Vider</button>
+            </div>
+          </div>
+        </div>
+        </section>
+      </div>
+
+      <!-- Colonne droite : réglages + aperçu -->
+      <div class="col">
+        <section class="panel" data-panel="preview">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">👁️ Aperçu</div>
+            <div class="card-description">Rendu en temps réel de l'overlay.</div>
+          </div>
+          <div class="card-content">
+            <div class="preview-frame"><iframe id="preview" title="Aperçu annonceur"></iframe></div>
+          </div>
+        </div>
+        </section>
+
+        <section class="panel" data-panel="settings">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🎨 Réglages</div>
+          </div>
+          <div class="card-content">
+            <div class="grid-2">
+              <div class="field">
+                <label class="label" for="eyebrow">Sur-titre <span class="hint">optionnel</span></label>
+                <input class="input" id="eyebrow" type="text" placeholder="(vide = comme la photo)" value="">
+              </div>
+              <div class="field">
+                <label class="label" for="year">Année <span class="hint">à droite</span></label>
+                <input class="input" id="year" type="text" value="2026" maxlength="4">
+              </div>
+            </div>
+            <div class="field">
+              <label class="label" for="duration">Durée (s) <span class="hint">0 = permanent (reste jusqu'à « Masquer »)</span></label>
+              <input class="input" id="duration" type="number" value="0" min="0" max="60">
+            </div>
+            <div class="grid-3">
+              <div class="field">
+                <label class="label" for="accent">Accent</label>
+                <input class="color" id="accent" type="color" value="#b08d4f">
+              </div>
+              <div class="field">
+                <label class="label" for="cardStart">Fond haut</label>
+                <input class="color" id="cardStart" type="color" value="#123a8f">
+              </div>
+              <div class="field">
+                <label class="label" for="cardEnd">Fond bas</label>
+                <input class="color" id="cardEnd" type="color" value="#0a2258">
+              </div>
+            </div>
+            <hr class="separator">
+            <div class="field">
+              <label class="label">Logo <span class="hint">image du bandeau</span></label>
+              <div class="row" style="gap:8px; flex-wrap:wrap">
+                <input type="file" id="logoFile" accept="image/*" style="display:none">
+                <button type="button" class="btn btn-secondary btn-sm" id="logoPick">📁 Choisir…</button>
+                <button type="button" class="btn btn-outline btn-sm" id="logoDefault">Logo SPARK</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="logoNone">Sans logo</button>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label" for="logoSize">Taille du logo <span class="hint tabnum" id="logoSizeVal">74 px</span></label>
+              <input id="logoSize" type="range" min="30" max="140" value="74" style="width:100%">
+            </div>
+            <hr class="separator">
+            <div class="field">
+              <label class="label" for="eyebrowSize">Taille sur-titre <span class="hint tabnum" id="eyebrowSizeVal">13 px</span></label>
+              <input id="eyebrowSize" type="range" min="9" max="26" value="13" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="nameSize">Taille du nom <span class="hint tabnum" id="nameSizeVal">46 px</span></label>
+              <input id="nameSize" type="range" min="28" max="80" value="46" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="degreeSize">Taille diplôme <span class="hint tabnum" id="degreeSizeVal">20 px</span></label>
+              <input id="degreeSize" type="range" min="12" max="40" value="20" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="mentionSize">Taille mention <span class="hint tabnum" id="mentionSizeVal">14 px</span></label>
+              <input id="mentionSize" type="range" min="9" max="28" value="14" style="width:100%">
+            </div>
+          </div>
+          <div class="card-footer">
+            <button class="btn btn-outline btn-sm" id="copyBtn">📋 Copier l'URL overlay</button>
+            <button class="btn btn-ghost btn-sm" id="resetBtn">↺ Réinitialiser le style</button>
+          </div>
+        </div>
+        </section>
+      </div>
+    </div>
+
+    <nav class="mobile-tabs">
+      <button data-target="direct" class="active">🎬<span>Direct</span></button>
+      <button data-target="list">📋<span>Liste</span></button>
+      <button data-target="settings">🎨<span>Réglages</span></button>
+      <button data-target="preview">👁️<span>Aperçu</span></button>
+    </nav>
+  </div>
+
+  <script src="roster-2026.js"></script>
+  <script>
+    const CHANNEL = 'graduate-announcer';
+    const CURRENT_KEY = 'ga-current-v2';   // {data, style, visible, seq, action} lu par l'overlay
+    const DOCK_KEY = 'ga-dock-v2';         // état du dock (liste, index, réglages)
+    const channel = ('BroadcastChannel' in window) ? new BroadcastChannel(CHANNEL) : null;
+
+    // ---- Exclusivité mutuelle avec le lower-third : afficher l'un masque l'autre ----
+    const SOLO_KEY = 'overlay-solo', MY_ID = 'announcer';
+    const soloCh = ('BroadcastChannel' in window) ? new BroadcastChannel(SOLO_KEY) : null;
+    const announceSolo = () => { const m = { owner: MY_ID, ts: Date.now() }; localStorage.setItem(SOLO_KEY, JSON.stringify(m)); if (soloCh) soloCh.postMessage(m); };
+    const onSolo = (m) => { if (m && m.owner && m.owner !== MY_ID && visible) hideOverlay(); };
+    if (soloCh) soloCh.onmessage = (e) => onSolo(e.data);
+    window.addEventListener('storage', (e) => { if (e.key === SOLO_KEY && e.newValue) { try { onSolo(JSON.parse(e.newValue)); } catch (_) {} } });
+
+    const $ = (id) => document.getElementById(id);
+    const preview = $('preview');
+    const statusEl = $('status');
+    const onair = $('onair');
+
+    const styleFields = ['eyebrow', 'year', 'duration', 'accent', 'cardStart', 'cardEnd', 'nameSize', 'eyebrowSize', 'degreeSize', 'mentionSize', 'logoSize'];
+    const sizeFields = ['eyebrowSize', 'nameSize', 'degreeSize', 'mentionSize', 'logoSize'];
+
+    let graduates = [];
+    let index = 0;
+    let visible = false;
+    let logoData = null;   // null = logo par défaut · '' = sans logo · data:URI = logo choisi
+
+    // ---------- URL de l'overlay ----------
+    const folderUrl = () => {
+      const p = location.pathname;
+      return 'file:///' + p.substring(0, p.lastIndexOf('/') + 1).replace(/\\/g, '/');
+    };
+    const baseUrl = folderUrl() + 'graduate-announcer.html';
+
+    // ---------- Parsing de la liste ----------
+    const parseList = (text) => text.split('\n')
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('#'))
+      .map(line => {
+        const [name = '', degree = '', mention = ''] = line.split('|').map(s => s.trim());
+        return { name, degree, mention };
+      });
+
+    // ---------- Construction de la config ----------
+    const buildStyle = () => ({
+      eyebrow: $('eyebrow').value,               // (dupliqué dans data mais pratique)
+      year: $('year').value.trim(),
+      duration: $('duration').value.trim(),
+      accent: $('accent').value,
+      cardStart: $('cardStart').value,
+      cardEnd: $('cardEnd').value,
+      nameSize: $('nameSize').value + 'px',
+      eyebrowSize: $('eyebrowSize').value + 'px',
+      degreeSize: $('degreeSize').value + 'px',
+      mentionSize: $('mentionSize').value + 'px',
+      logoSize: $('logoSize').value + 'px',
+      logo: logoData
+    });
+
+    const buildData = () => {
+      const g = graduates[index] || { name: '—', degree: '', mention: '' };
+      return {
+        eyebrow: $('eyebrow').value,
+        name: g.name || '—',
+        degree: g.degree || '',
+        mention: g.mention || ''
+      };
+    };
+
+    const toUrl = () => {
+      const s = buildStyle(), d = buildData();
+      delete s.logo; // le data:URI du logo ne passe pas dans une URL
+      const p = new URLSearchParams();
+      Object.entries({ ...s, ...d }).forEach(([k, v]) => { if (v !== '') p.set(k, v); });
+      return baseUrl + '?' + p.toString();
+    };
+
+    // ---------- Diffusion vers l'overlay (état partagé + seq) ----------
+    let seq = 0;
+
+    const send = (action) => {
+      const data = buildData(), style = buildStyle();
+      const state = { data, style, visible, seq, action };
+      localStorage.setItem(CURRENT_KEY, JSON.stringify(state));
+      saveDock();
+      if (channel) channel.postMessage(state);
+    };
+
+    const setVisible = (v) => {
+      visible = v;
+      onair.textContent = v ? '● En direct' : '● Hors antenne';
+      onair.className = 'badge ' + (v ? 'badge-live' : 'badge-off');
+      if (v) onair.innerHTML = '<span class="dot"></span> En direct';
+      onair.style.marginLeft = 'auto';
+    };
+
+    // ---------- Actions ----------
+    const showCurrent = () => { setVisible(true); seq++; send('show'); announceSolo(); renderList(); toast('▶ ' + (graduates[index]?.name || '—') + ' — en direct.'); };
+    const hideOverlay  = () => { setVisible(false); seq++; send('hide'); toast('■ Overlay masqué.'); };
+    const updateSilently = () => { send('update'); renderList(); };
+
+    const goTo = (i, andShow = true) => {
+      if (!graduates.length) return;
+      index = (i + graduates.length) % graduates.length;
+      if (andShow) showCurrent(); else updateSilently();
+    };
+    const next = () => goTo(index + 1, true);
+    const prev = () => goTo(index - 1, true);
+
+    // ---------- Rendu de la file ----------
+    const renderList = () => {
+      const list = $('list');
+      $('counter').textContent = (graduates.length ? index + 1 : 0) + ' / ' + graduates.length;
+      if (!graduates.length) {
+        list.innerHTML = '<div class="muted text-sm" style="padding:10px">Aucun diplômé. Colle la liste ci-dessous puis « Recharger ».</div>';
+        return;
+      }
+      list.innerHTML = '';
+      graduates.forEach((g, i) => {
+        const row = document.createElement('button');
+        row.className = 'list-row' + (i === index ? ' is-current' : '');
+        row.innerHTML =
+          '<span class="idx">' + (i + 1) + '</span>' +
+          '<span class="primary">' + escapeHtml(g.name) + '</span>' +
+          '<span class="sub">' + escapeHtml(g.mention || g.degree || '') + '</span>';
+        row.addEventListener('click', () => goTo(i, true));
+        list.appendChild(row);
+      });
+      const cur = list.querySelector('.is-current');
+      if (cur) cur.scrollIntoView({ block: 'nearest' });
+    };
+
+    const escapeHtml = (s) => (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    // ---------- Persistance du dock ----------
+    const saveDock = () => {
+      const style = Object.fromEntries(styleFields.map(f => [f, $(f).value]));
+      localStorage.setItem(DOCK_KEY, JSON.stringify({ listText: $('listInput').value, index, style, logo: logoData }));
+    };
+    const OFFICIAL_ROSTER = (typeof DEFAULT_ROSTER === 'string') ? DEFAULT_ROSTER.trim() : '';
+    const loadDock = () => {
+      try {
+        const s = JSON.parse(localStorage.getItem(DOCK_KEY) || '{}');
+        // Liste sauvegardée si présente, sinon la liste officielle SPARK 2026 pré-chargée
+        $('listInput').value = (s.listText && s.listText.trim()) ? s.listText : OFFICIAL_ROSTER;
+        if (s.style) styleFields.forEach(f => { if (s.style[f] != null) $(f).value = s.style[f]; });
+        if (s.logo !== undefined) logoData = s.logo;
+        graduates = parseList($('listInput').value);
+        index = Math.min(s.index || 0, Math.max(0, graduates.length - 1));
+      } catch (e) { $('listInput').value = OFFICIAL_ROSTER; graduates = parseList($('listInput').value); }
+    };
+
+    // ---------- Logo (fichier -> data:URI, redimensionné) ----------
+    const fileToLogo = (file) => {
+      const r = new FileReader();
+      r.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const maxH = 260, scale = Math.min(1, maxH / img.height);
+          const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
+          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          logoData = c.toDataURL('image/png');
+          updateSilently(); toast('🖼️ Logo mis à jour.');
+        };
+        img.onerror = () => toast('Image illisible.');
+        img.src = r.result;
+      };
+      r.readAsDataURL(file);
+    };
+    $('logoPick').addEventListener('click', () => $('logoFile').click());
+    $('logoFile').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) fileToLogo(f); e.target.value = ''; });
+    $('logoDefault').addEventListener('click', () => { logoData = null; updateSilently(); toast('Logo SPARK par défaut.'); });
+    $('logoNone').addEventListener('click', () => { logoData = ''; updateSilently(); toast('Sans logo.'); });
+
+    const toast = (msg) => {
+      statusEl.textContent = msg;
+      statusEl.classList.add('show');
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => statusEl.classList.remove('show'), 2600);
+    };
+
+    // ---------- Câblage ----------
+    $('nextBtn').addEventListener('click', next);
+    $('prevBtn').addEventListener('click', prev);
+    $('showBtn').addEventListener('click', showCurrent);
+    $('hideBtn').addEventListener('click', hideOverlay);
+
+    $('reloadBtn').addEventListener('click', () => {
+      graduates = parseList($('listInput').value);
+      index = Math.min(index, Math.max(0, graduates.length - 1));
+      updateSilently();
+      toast('✓ ' + graduates.length + ' diplômé(s) chargé(s).');
+    });
+    $('officialBtn').addEventListener('click', () => {
+      if (!OFFICIAL_ROSTER) { toast('Liste officielle introuvable (roster-2026.js).'); return; }
+      $('listInput').value = OFFICIAL_ROSTER;
+      graduates = parseList(OFFICIAL_ROSTER); index = 0; updateSilently();
+      toast('🎓 Liste SPARK 2026 chargée — ' + graduates.length + ' diplômés.');
+    });
+    $('clearBtn').addEventListener('click', () => {
+      $('listInput').value = ''; graduates = []; index = 0; updateSilently();
+    });
+
+    const refreshSizeLabels = () => sizeFields.forEach(f => {
+      const el = document.getElementById(f + 'Val');
+      if (el) el.textContent = $(f).value + ' px';
+    });
+
+    styleFields.forEach(f => {
+      $(f).addEventListener('input', () => {
+        if (sizeFields.includes(f)) refreshSizeLabels();
+        updateSilently();
+      });
+    });
+
+    $('copyBtn').addEventListener('click', () => {
+      navigator.clipboard.writeText(baseUrl)
+        .then(() => toast('📋 URL statique copiée — à coller UNE FOIS dans la source Navigateur OBS.'))
+        .catch(() => toast(baseUrl));
+    });
+    $('resetBtn').addEventListener('click', () => {
+      const defaults = { eyebrow: '', year: '2026', duration: '0', accent: '#b08d4f', cardStart: '#123a8f', cardEnd: '#0a2258', nameSize: '46', eyebrowSize: '13', degreeSize: '20', mentionSize: '14', logoSize: '74' };
+      Object.entries(defaults).forEach(([k, v]) => { $(k).value = v; });
+      logoData = null;
+      refreshSizeLabels();
+      updateSilently();
+      toast('↺ Style réinitialisé.');
+    });
+
+    // Raccourcis clavier (ignorés quand on tape dans un champ)
+    document.addEventListener('keydown', (e) => {
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+      else if (e.key === 'Escape') { e.preventDefault(); hideOverlay(); }
+      else if (e.key === ' ') { e.preventDefault(); visible ? hideOverlay() : showCurrent(); }
+    });
+
+    // ---------- Aperçu fidèle : mise à l'échelle du 1920×1080 dans le cadre ----------
+    const scalePreview = () => {
+      const frame = preview.parentElement; // .preview-frame
+      if (!frame) return;
+      const w = frame.clientWidth;
+      if (w > 0) preview.style.transform = 'scale(' + (w / 1920) + ')';
+    };
+    window.addEventListener('resize', scalePreview);
+    if ('ResizeObserver' in window) new ResizeObserver(scalePreview).observe(preview.parentElement);
+
+    // ---------- Onglets (téléphone) ----------
+    document.querySelectorAll('.mobile-tabs button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.target;
+        document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.dataset.panel === target));
+        document.querySelectorAll('.mobile-tabs button').forEach((b) => b.classList.toggle('active', b === btn));
+        scalePreview(); // l'aperçu peut avoir été masqué (largeur 0)
+      });
+    });
+
+    // ---------- Init ----------
+    loadDock();
+    refreshSizeLabels();
+    try { const prev = JSON.parse(localStorage.getItem(CURRENT_KEY) || 'null'); if (prev && prev.seq) seq = prev.seq; } catch (e) {}
+    setVisible(false);
+    send('update');                        // publie l'état initial (caché)
+    preview.src = baseUrl + '?preview=1';  // l'aperçu s'affiche d'office
+    preview.addEventListener('load', scalePreview);
+    scalePreview();
+    renderList();
+  </script>
+</body>
+</html>

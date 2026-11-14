@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Commentaires — Overlay</title>
+  <style>
+    :root {
+      --accent: #1877F2;
+      --bg1: rgba(10, 18, 40, 0.90);
+      --bg2: rgba(6, 11, 26, 0.94);
+      --author-size: 21px;
+      --text-size: 24px;
+      --avatar: 52px;
+    }
+    html, body { width:100%; height:100%; margin:0; overflow:hidden; background:transparent;
+      font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif; }
+
+    /* le rehaussement (translateY) est piloté par JS ; ici seule la transition est déclarée */
+    .stage { position:absolute; inset:0; display:flex; padding:5vh 5vw; box-sizing:border-box;
+      transition:transform .45s cubic-bezier(.16,.84,.2,1); }
+    .stage[data-pos="bottom-left"]  { align-items:flex-end;   justify-content:flex-start; }
+    .stage[data-pos="bottom-right"] { align-items:flex-end;   justify-content:flex-end; }
+    .stage[data-pos="top-left"]     { align-items:flex-start; justify-content:flex-start; }
+    .stage[data-pos="top-right"]    { align-items:flex-start; justify-content:flex-end; }
+    .stage[data-pos="bottom"]       { align-items:flex-end;   justify-content:center; }
+
+    .bubble {
+      position:relative; display:flex; align-items:center; gap:14px;
+      max-width:min(840px, 72vw);
+      padding:16px 24px;
+      background:linear-gradient(160deg, var(--bg1), var(--bg2));
+      border-radius:16px;
+      box-shadow:0 20px 55px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.07);
+      border-left:6px solid var(--accent);
+      color:#fff;
+      opacity:0; transform:translateX(-32px);
+      transition:opacity .45s ease, transform .5s cubic-bezier(.16,.84,.2,1);
+    }
+    .stage[data-bg="none"] .bubble { background:none; box-shadow:none; border-left:0; padding:8px 14px; }
+    .stage[data-pos*="right"] .bubble { transform:translateX(32px); border-left:0; border-right:6px solid var(--accent); }
+    .stage.is-visible .bubble { opacity:1; transform:translateX(0); }
+    .stage.is-hiding  .bubble { opacity:0; transform:translateY(14px); transition:opacity .35s ease, transform .35s ease; }
+
+    .fbicon, .yticon { position:absolute; top:12px; right:14px; width:22px; height:22px; opacity:.92; }
+    .yticon { display:none; }
+    .stage[data-source="yt"] .fbicon { display:none; }
+    .stage[data-source="yt"] .yticon { display:block; }
+    .stage.no-badge .fbicon, .stage.no-badge .yticon { display:none; }
+
+    .avatar-wrap { flex:0 0 auto; width:var(--avatar); height:var(--avatar); }
+    .stage.no-avatar .avatar-wrap { display:none; }
+    .avatar-wrap img, .avatar-fallback {
+      width:var(--avatar); height:var(--avatar); border-radius:50%; object-fit:cover; display:block;
+      box-shadow:0 4px 12px rgba(0,0,0,.4);
+    }
+    .avatar-fallback {
+      display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(150deg, var(--accent), #0e57c2);
+      color:#fff; font-weight:800; font-size:calc(var(--avatar) * 0.42); text-transform:uppercase;
+    }
+
+    .txt { min-width:0; display:flex; flex-direction:column; gap:4px; }
+    .author {
+      font-size:var(--author-size); font-weight:800; color:var(--accent);
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .message {
+      font-size:var(--text-size); font-weight:500; line-height:1.28;
+      display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+      text-shadow:0 2px 10px rgba(0,0,0,.5);
+    }
+
+    .bubble.in .author { animation:rise .4s ease both; }
+    .bubble.in .message { animation:rise .4s ease .05s both; }
+    @keyframes rise { 0% { opacity:0; transform:translateY(8px); } 100% { opacity:1; transform:translateY(0); } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .bubble { transition:none !important; } .bubble.in .author, .bubble.in .message { animation:none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage" data-pos="bottom-left" data-bg="card">
+    <div class="bubble" id="bubble">
+      <div class="avatar-wrap" id="avatarWrap">
+        <img id="avatar" alt="" style="display:none">
+        <div class="avatar-fallback" id="avatarFb">?</div>
+      </div>
+      <div class="txt">
+        <div class="author" id="author"></div>
+        <div class="message" id="message"></div>
+      </div>
+      <svg class="fbicon" id="fbicon" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.96.93-1.96 1.89v2.25h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07z"/></svg>
+      <svg class="yticon" id="yticon" viewBox="0 0 24 24"><path fill="#FF0000" d="M23.5 6.2s-.23-1.65-.94-2.38c-.9-.94-1.9-.95-2.36-1C16.9 2.5 12 2.5 12 2.5h-.01s-4.9 0-8.2.32c-.46.05-1.46.06-2.36 1C.72 4.55.5 6.2.5 6.2S.27 8.13.27 10.07v1.81c0 1.94.23 3.87.23 3.87s.22 1.65.93 2.38c.9.94 2.08.91 2.6 1.01 1.89.18 8 .24 8 .24s4.9-.01 8.2-.33c.46-.05 1.46-.06 2.36-1 .71-.73.94-2.38.94-2.38s.23-1.93.23-3.87v-1.81c0-1.94-.23-3.87-.23-3.87z"/><path fill="#fff" d="M9.55 14.57V8.02l6.3 3.28z"/></svg>
+    </div>
+  </div>
+
+  <script src="overlay-stack.js"></script>
+  <script>
+    const CHANNEL='facebook', STATE_KEY='facebook-state';
+    const root=document.documentElement, stage=document.getElementById('stage'), bubble=document.getElementById('bubble');
+    const avatar=document.getElementById('avatar'), avatarFb=document.getElementById('avatarFb');
+    const authorEl=document.getElementById('author'), messageEl=document.getElementById('message');
+    const VARS={ accent:'--accent', bg1:'--bg1', bg2:'--bg2', authorSize:'--author-size', textSize:'--text-size', avatarSize:'--avatar' };
+    let lastKey='';
+
+    // ---- Rehaussement auto : reste au-dessus de tout overlay occupant le bas ----
+    let liftFrac=0;
+    const applyLift = () => {
+      const pos = stage.getAttribute('data-pos') || '';
+      const atBottom = pos === 'bottom' || pos === 'bottom-left' || pos === 'bottom-right';
+      const f = atBottom ? liftFrac : 0;
+      // pixels = fraction occupée + 3vh de respiration ; piloté en JS (translateY fiable)
+      const px = f > 0 ? Math.round(f * window.innerHeight + window.innerHeight * 0.03) : 0;
+      stage.style.transform = px > 0 ? 'translateY(-' + px + 'px)' : '';
+    };
+    window.addEventListener('resize', applyLift);
+
+    const setAvatar = (url, author) => {
+      if (url) { avatar.src=url; avatar.style.display='block'; avatarFb.style.display='none';
+        avatar.onerror=()=>{ avatar.style.display='none'; avatarFb.style.display='flex'; avatarFb.textContent=(author||'?').trim().charAt(0)||'?'; }; }
+      else { avatar.style.display='none'; avatarFb.style.display='flex'; avatarFb.textContent=(author||'?').trim().charAt(0)||'?'; }
+    };
+
+    const applyConfig = (c) => {
+      if (!c) return;
+      for (const [k,v] of Object.entries(VARS)) if (c[k]!=null && c[k]!=='') root.style.setProperty(v, c[k]);
+      if (c.position) { stage.setAttribute('data-pos', c.position); applyLift(); }
+      stage.setAttribute('data-source', c.source==='yt' ? 'yt' : 'fb');
+      stage.setAttribute('data-bg', c.card===false ? 'none' : 'card');
+      stage.classList.toggle('no-avatar', c.showAvatar===false);
+      stage.classList.toggle('no-badge', c.showBadge===false);
+      const key = (c.author||'')+'|'+(c.message||'')+'|'+(c.avatar||'');
+      if (key !== lastKey) {
+        lastKey = key;
+        authorEl.textContent = c.author || '';
+        messageEl.textContent = c.message || '';
+        setAvatar(c.avatar, c.author);
+        bubble.classList.remove('in'); void bubble.offsetWidth; bubble.classList.add('in');
+      }
+    };
+
+    function show(){ stage.classList.remove('is-hiding','is-visible'); void stage.offsetWidth; stage.classList.add('is-visible'); }
+    function hide(){ stage.classList.remove('is-visible'); stage.classList.add('is-hiding'); }
+
+    let lastSeq=null;
+    const applyState = (s) => { if(!s) return; applyConfig(s.config);
+      if (s.seq!==lastSeq){ lastSeq=s.seq; if (s.action==='show'||(s.action==null&&s.visible)) show(); else if (s.action==='hide') hide(); } };
+    const readState = () => { try{ return JSON.parse(localStorage.getItem(STATE_KEY)||'null'); }catch(e){ return null; } };
+
+    const params=new URLSearchParams(location.search), forceShow=params.get('preview')==='1';
+    const init=readState();
+    if (init){ applyConfig(init.config); lastSeq=init.seq; if(forceShow||init.visible) setTimeout(show,40); }
+    else if (forceShow) setTimeout(show,40);
+
+    if ('BroadcastChannel' in window){ const ch=new BroadcastChannel(CHANNEL); ch.onmessage=e=>applyState(e.data); }
+    window.addEventListener('storage', e=>{ if(e.key===STATE_KEY) applyState(readState()); });
+    setInterval(()=>applyState(readState()), 300);
+
+    // ---- Abonnement à la pile d'overlays : se rehausser au-dessus du plus haut ----
+    if (window.OverlayStack && !forceShow) {
+      OverlayStack.subscribeBottom('chat', (maxFrac) => { liftFrac = maxFrac; applyLift(); });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UAZ Live — Régie</title>
+  <link rel="stylesheet" href="dock-ui.css">
+  <style>
+    .preview-frame { position:relative; overflow:hidden; }
+    #preview { position:absolute; top:0; left:0; width:1920px; height:1080px; transform-origin:top left; border:0;
+      background:repeating-conic-gradient(#2a2f3a 0 25%, #20242d 0 50%) 0 0/24px 24px; }
+    .chk { display:flex; align-items:center; gap:9px; font-size:13.5px; cursor:pointer; padding:3px 0; }
+    .chk input { width:18px; height:18px; accent-color:hsl(var(--brand)); }
+    .sect { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .sect .label { margin:0; }
+    .people { display:grid; gap:5px; max-height:300px; overflow-y:auto; padding:2px; }
+    .person { display:grid; grid-template-columns:1fr auto; align-items:center; gap:8px; padding:8px 8px 8px 12px;
+      border:1px solid hsl(var(--border)); border-radius:calc(var(--radius) - .2rem); background:hsl(var(--card)); }
+    .person.cur { border-color:hsl(var(--brand)/.6); background:hsl(var(--brand)/.12); }
+    .person button.pick { all:unset; cursor:pointer; display:grid; gap:1px; min-width:0; touch-action:manipulation; }
+    .person .pn { font-weight:650; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .person .pr { font-size:12px; color:hsl(var(--muted-foreground)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .person .del { width:28px; height:28px; border-radius:7px; border:0; background:transparent; color:hsl(var(--muted-foreground));
+      cursor:pointer; font-size:14px; }
+    .person .del:hover { background:hsl(var(--destructive)/.15); color:hsl(var(--destructive)); }
+    .pill { font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; border:1px solid hsl(var(--border)); color:hsl(var(--muted-foreground)); }
+    .pill.on { background:hsl(var(--live)/.15); border-color:hsl(var(--live)/.5); color:hsl(var(--live)); }
+    .link { display:flex; align-items:flex-start; gap:9px; font-size:12.5px; line-height:1.45; padding:9px 11px;
+      border-radius:calc(var(--radius) - .2rem); border:1px solid hsl(var(--border)); color:hsl(var(--muted-foreground)); }
+    .link .ld { flex:0 0 auto; width:9px; height:9px; border-radius:50%; margin-top:4px; background:hsl(var(--muted-foreground)); }
+    .link.ok { border-color:hsl(142 60% 45% / .45); color:hsl(var(--foreground)); }
+    .link.ok .ld { background:hsl(142 65% 45%); }
+    .link.ko { border-color:hsl(var(--destructive)/.55); background:hsl(var(--destructive)/.08); color:hsl(var(--foreground)); }
+    .link.ko .ld { background:hsl(var(--destructive)); }
+    .link code { font-size:11.5px; }
+
+    .mobile-tabs { display:none; }
+    @media (max-width:880px) {
+      body { padding:0; }
+      .mobile-app { display:flex; flex-direction:column; height:100dvh; }
+      .page-header { padding:10px 14px; margin:0; gap:8px; border-bottom:1px solid hsl(var(--border)); }
+      .page-header h1 { font-size:16px; } .page-header .desc { display:none; }
+      .app-grid { flex:1; min-height:0; display:block; position:relative; gap:0; }
+      .app-grid > .col { display:contents; }
+      .panel { position:absolute; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:12px; display:none; }
+      .panel.active { display:block; }
+      .card { box-shadow:none; border-radius:12px; }
+      .people { max-height:min(40vh, 320px); }
+      .mobile-tabs { display:grid; grid-template-columns:repeat(3,1fr); background:hsl(var(--card)); border-top:1px solid hsl(var(--border)); padding-bottom:env(safe-area-inset-bottom,0); }
+      .mobile-tabs button { display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 4px; background:none; border:0; cursor:pointer; color:hsl(var(--muted-foreground)); font:inherit; font-size:17px; line-height:1; }
+      .mobile-tabs button span { font-size:10.5px; font-weight:500; }
+      .mobile-tabs button.active { color:hsl(var(--brand)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container mobile-app">
+    <div class="page-header">
+      <h1>🎙️ UAZ Live</h1>
+      <span class="desc">Habillage du direct + bandeau intervenant</span>
+      <span class="badge badge-off" id="onair" style="margin-left:auto">● Bandeau masqué</span>
+    </div>
+
+    <div class="app-grid">
+      <div class="col">
+        <section class="panel active" data-panel="direct">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">▶ Direct</div>
+            <div class="card-description"><kbd>Échap</kbd> masque le bandeau</div>
+          </div>
+          <div class="card-content">
+            <div class="link" id="link"><span class="ld"></span><span id="linkTxt">Recherche de l'overlay OBS…</span></div>
+            <div class="sect">
+              <div class="label">Habillage <span class="hint">logo · EN DIRECT · barre du bas</span></div>
+              <span class="pill" id="framePill">masqué</span>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-brand" id="frameShowBtn">Afficher l'habillage</button>
+              <button class="btn btn-secondary" id="frameHideBtn">Masquer</button>
+            </div>
+
+            <hr class="separator">
+            <div class="sect">
+              <div class="label">Bandeau intervenant</div>
+              <span class="pill" id="cardPill">masqué</span>
+            </div>
+            <div class="field">
+              <label class="label" for="label">Sur-titre</label>
+              <input class="input" id="label" type="text" value="Intervenant · Live">
+            </div>
+            <div class="field">
+              <label class="label" for="name">Nom</label>
+              <input class="input" id="name" type="text" placeholder="Nom de l'intervenant">
+            </div>
+            <div class="field">
+              <label class="label" for="role">Fonction <span class="hint">optionnel</span></label>
+              <input class="input" id="role" type="text" placeholder="Fonction / département">
+            </div>
+            <div class="field">
+              <label class="label" for="duration">Masquer automatiquement après <span class="hint">0 = reste affiché</span></label>
+              <div class="row" style="gap:8px"><input class="input" id="duration" type="number" min="0" max="120" value="0" style="width:90px"><span class="muted text-sm">secondes</span></div>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" id="cardShowBtn">Afficher / mettre à jour</button>
+              <button class="btn btn-secondary" id="cardHideBtn">Masquer</button>
+            </div>
+
+            <hr class="separator">
+            <div class="sect">
+              <div class="label">Intervenants <span class="hint">un clic = afficher</span></div>
+              <button class="btn btn-outline btn-sm" id="saveBtn">＋ Enregistrer</button>
+            </div>
+            <div class="people" id="people"></div>
+            <div class="status" id="status"></div>
+          </div>
+        </div>
+        </section>
+      </div>
+
+      <div class="col">
+        <section class="panel" data-panel="preview">
+        <div class="card">
+          <div class="card-header"><div class="card-title">👁️ Aperçu</div></div>
+          <div class="card-content"><div class="preview-frame"><iframe id="preview" title="Aperçu UAZ Live"></iframe></div></div>
+        </div>
+        </section>
+
+        <section class="panel" data-panel="style">
+        <div class="card">
+          <div class="card-header"><div class="card-title">🎨 Style</div></div>
+          <div class="card-content">
+            <div class="grid-2">
+              <div class="field"><label class="label" for="brandL1">Logo — ligne 1</label><input class="input" id="brandL1" type="text" value="Université Adventiste"></div>
+              <div class="field"><label class="label" for="brandL2">Logo — ligne 2</label><input class="input" id="brandL2" type="text" value="Zurcher"></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label class="label" for="liveText">Badge</label><input class="input" id="liveText" type="text" value="En direct"></div>
+              <div class="field"><label class="label" for="footerText">Barre du bas</label><input class="input" id="footerText" type="text" value="Université Adventiste Zurcher"></div>
+            </div>
+            <div class="field">
+              <label class="chk"><input type="checkbox" id="showBrand" checked> Logo en haut à gauche</label>
+              <label class="chk"><input type="checkbox" id="showLive" checked> Badge « En direct »</label>
+              <label class="chk"><input type="checkbox" id="showFooter" checked> Barre du bas</label>
+              <label class="chk"><input type="checkbox" id="pulse" checked> Point « en direct » qui respire doucement</label>
+            </div>
+            <hr class="separator">
+            <div class="grid-3">
+              <div class="field"><label class="label" for="navy">Fond</label><input class="color" id="navy" type="color" value="#1b2a6b"></div>
+              <div class="field"><label class="label" for="accent">Accent</label><input class="color" id="accent" type="color" value="#14c3d6"></div>
+              <div class="field"><label class="label" for="roleColor">Fonction</label><input class="color" id="roleColor" type="color" value="#aab6e6"></div>
+            </div>
+            <div class="field">
+              <label class="label" for="nameSize">Taille du nom <span class="hint tabnum" id="nameSizeVal">48 px</span></label>
+              <input id="nameSize" type="range" min="28" max="80" value="48" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="roleSize">Taille de la fonction <span class="hint tabnum" id="roleSizeVal">22 px</span></label>
+              <input id="roleSize" type="range" min="14" max="40" value="22" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="cardWidth">Largeur du bandeau <span class="hint tabnum" id="cardWidthVal">1120 px</span></label>
+              <input id="cardWidth" type="range" min="600" max="1790" step="10" value="1120" style="width:100%">
+            </div>
+          </div>
+          <div class="card-footer">
+            <button class="btn btn-outline btn-sm" id="copyBtn">📋 Copier l'URL overlay</button>
+            <button class="btn btn-ghost btn-sm" id="resetBtn">↺ Réinitialiser le style</button>
+          </div>
+        </div>
+        </section>
+      </div>
+    </div>
+
+    <nav class="mobile-tabs">
+      <button data-target="direct" class="active">▶<span>Direct</span></button>
+      <button data-target="style">🎨<span>Style</span></button>
+      <button data-target="preview">👁️<span>Aperçu</span></button>
+    </nav>
+  </div>
+
+  <script>
+    const CHANNEL='uaz-live', STATE_KEY='uaz-live-state', DOCK_KEY='uaz-live-dock';
+    const channel = ('BroadcastChannel' in window) ? new BroadcastChannel(CHANNEL) : null;
+    const $ = id => document.getElementById(id);
+    const preview=$('preview'), statusEl=$('status');
+    const escapeHtml = s => String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+    const textFields=['label','name','role','duration'];
+    const styleText=['brandL1','brandL2','liveText','footerText','navy','accent','roleColor','nameSize','roleSize','cardWidth'];
+    const styleCheck=['showBrand','showLive','showFooter','pulse'];
+    const sizes={ nameSize:'px', roleSize:'px', cardWidth:'px' };
+    const DEFAULTS={ brandL1:'Université Adventiste', brandL2:'Zurcher', liveText:'En direct', footerText:'Université Adventiste Zurcher',
+      navy:'#1b2a6b', accent:'#14c3d6', roleColor:'#aab6e6', nameSize:'48', roleSize:'22', cardWidth:'1120' };
+
+    let frame=false, cardOn=false, frameSeq=0, cardSeq=0, people=[], curPerson=-1, hideTimer=null;
+    // ce qui est réellement à l'écran (les champs peuvent être modifiés sans toucher au direct)
+    let live={ label:'Intervenant · Live', name:'', role:'' };
+
+    // ---- exclusivité : le bandeau masque l'annonceur / lower third, et inversement ----
+    const SOLO_KEY='overlay-solo', MY_ID='uaz-live';
+    const soloCh = ('BroadcastChannel' in window) ? new BroadcastChannel(SOLO_KEY) : null;
+    const announceSolo = () => { const m={owner:MY_ID,ts:Date.now()}; try{ localStorage.setItem(SOLO_KEY,JSON.stringify(m)); }catch(_){} if(soloCh) soloCh.postMessage(m); };
+    const onSolo = m => { if (m && m.owner && m.owner!==MY_ID && cardOn) hideCard(true); };
+    if (soloCh) soloCh.onmessage = e => onSolo(e.data);
+    window.addEventListener('storage', e => { if (e.key===SOLO_KEY && e.newValue) { try{ onSolo(JSON.parse(e.newValue)); }catch(_){} } });
+
+    const toast = m => { statusEl.textContent=m; statusEl.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>statusEl.classList.remove('show'),2400); };
+
+    const config = () => {
+      const c={ label:live.label, name:live.name, role:live.role };
+      styleText.forEach(f=>c[f]=$(f).value);
+      ['nameSize','roleSize','cardWidth'].forEach(f=>c[f]=$(f).value+'px');
+      styleCheck.forEach(f=>c[f]=$(f).checked);
+      return c;
+    };
+    const send = () => {
+      const st={ config:config(), frame, card:cardOn, frameSeq, cardSeq };
+      try { localStorage.setItem(STATE_KEY, JSON.stringify(st)); } catch(e) { toast('⚠️ Stockage plein : '+e.message); }
+      if (channel) channel.postMessage(st);
+      saveDock(); renderStatus();
+    };
+
+    const renderStatus = () => {
+      $('framePill').textContent = frame?'à l\'antenne':'masqué'; $('framePill').classList.toggle('on', frame);
+      $('cardPill').textContent = cardOn?'à l\'antenne':'masqué'; $('cardPill').classList.toggle('on', cardOn);
+      const o=$('onair');
+      o.className='badge '+(cardOn?'badge-live':'badge-off'); o.style.marginLeft='auto';
+      o.innerHTML = cardOn ? '<span class="dot"></span> '+escapeHtml(live.name||'Bandeau') : '● Bandeau masqué';
+    };
+
+    // ---- habillage ----
+    const showFrame = () => { frame=true; frameSeq++; send(); toast('✓ Habillage affiché.'); };
+    const hideFrame = () => { frame=false; frameSeq++; send(); toast('■ Habillage masqué.'); };
+
+    // ---- bandeau ----
+    const showCard = () => {
+      const name=$('name').value.trim();
+      if (!name) { toast('Saisis d\'abord un nom.'); $('name').focus(); return; }
+      live={ label:$('label').value.trim(), name, role:$('role').value.trim() };
+      // l'overlay décide : s'il est déjà à l'écran -> fondu du texte ; sinon (ex. rechargé par OBS) -> entrée
+      cardOn=true; cardSeq++;
+      send(); announceSolo(); renderPeople();
+      clearTimeout(hideTimer);
+      const d=Number($('duration').value)||0;
+      if (d>0) hideTimer=setTimeout(()=>hideCard(), d*1000);
+    };
+    const hideCard = silent => { clearTimeout(hideTimer); if (!cardOn) return; cardOn=false; cardSeq++; send(); if(!silent) toast('■ Bandeau masqué.'); };
+
+    // ---- liste des intervenants ----
+    const renderPeople = () => {
+      const wrap=$('people');
+      if (!people.length) { wrap.innerHTML='<div class="muted text-sm" style="padding:10px">Aucun intervenant enregistré. Remplis les champs puis « ＋ Enregistrer ».</div>'; return; }
+      wrap.innerHTML='';
+      people.forEach((p,i)=>{
+        const row=document.createElement('div');
+        const isLive = cardOn && live.name===p.name && live.role===p.role;
+        row.className='person'+(isLive?' cur':'');
+        row.innerHTML='<button class="pick" type="button"><span class="pn">'+escapeHtml(p.name)+'</span><span class="pr">'+escapeHtml(p.role||p.label||'')+'</span></button><button class="del" type="button" title="Retirer">✕</button>';
+        row.querySelector('.pick').addEventListener('click', ()=>{ $('label').value=p.label||''; $('name').value=p.name; $('role').value=p.role||''; curPerson=i; showCard(); });
+        row.querySelector('.del').addEventListener('click', ()=>{ people.splice(i,1); saveDock(); renderPeople(); });
+        wrap.appendChild(row);
+      });
+    };
+    $('saveBtn').addEventListener('click', ()=>{
+      const p={ label:$('label').value.trim(), name:$('name').value.trim(), role:$('role').value.trim() };
+      if (!p.name) { toast('Saisis d\'abord un nom.'); return; }
+      const i=people.findIndex(x=>x.name===p.name);
+      if (i>=0) people[i]=p; else people.push(p);
+      saveDock(); renderPeople(); toast('✓ '+p.name+' enregistré.');
+    });
+
+    // ---- persistance ----
+    const saveDock = () => {
+      const o={ people, fields:{}, style:{} };
+      textFields.forEach(f=>o.fields[f]=$(f).value);
+      styleText.forEach(f=>o.style[f]=$(f).value); styleCheck.forEach(f=>o.style[f]=$(f).checked);
+      try { localStorage.setItem(DOCK_KEY, JSON.stringify(o)); } catch(e){}
+    };
+    const loadDock = () => {
+      let o={}; try{ o=JSON.parse(localStorage.getItem(DOCK_KEY)||'{}'); }catch(e){}
+      if (Array.isArray(o.people)) people=o.people;
+      if (o.fields) textFields.forEach(f=>{ if(o.fields[f]!=null) $(f).value=o.fields[f]; });
+      if (o.style) { styleText.forEach(f=>{ if(o.style[f]!=null) $(f).value=o.style[f]; }); styleCheck.forEach(f=>{ if(o.style[f]!=null) $(f).checked=o.style[f]; }); }
+      // reprend l'état d'antenne (habillage, seq) sans rien réafficher
+      try { const s=JSON.parse(localStorage.getItem(STATE_KEY)||'null');
+        if (s) { frame=!!s.frame; cardOn=!!s.card; frameSeq=s.frameSeq||0; cardSeq=s.cardSeq||0; if (s.config) live={ label:s.config.label||'', name:s.config.name||'', role:s.config.role||'' }; }
+      } catch(e){}
+    };
+
+    // ---- câblage ----
+    $('frameShowBtn').addEventListener('click', showFrame);
+    $('frameHideBtn').addEventListener('click', hideFrame);
+    $('cardShowBtn').addEventListener('click', showCard);
+    $('cardHideBtn').addEventListener('click', ()=>hideCard());
+    ['label','name','role'].forEach(f=>$(f).addEventListener('keydown', e=>{ if (e.key==='Enter') { e.preventDefault(); showCard(); } }));
+    textFields.forEach(f=>$(f).addEventListener('input', saveDock));
+    const refreshLabels = () => Object.keys(sizes).forEach(f=>$(f+'Val').textContent=$(f).value+' px');
+    [...styleText,...styleCheck].forEach(f=>$(f).addEventListener('input', ()=>{ refreshLabels(); send(); }));
+    document.addEventListener('keydown', e=>{ if (e.key==='Escape') { e.preventDefault(); hideCard(); } });
+
+    const folderUrl = () => { const p=location.pathname; return 'file:///'+p.substring(0,p.lastIndexOf('/')+1).replace(/\\/g,'/'); };
+    const baseUrl = decodeURI(folderUrl())+'uaz-live.html';
+    $('copyBtn').addEventListener('click', ()=>navigator.clipboard.writeText(baseUrl).then(()=>toast('📋 URL copiée.')).catch(()=>toast(baseUrl)));
+    $('resetBtn').addEventListener('click', ()=>{
+      Object.entries(DEFAULTS).forEach(([k,v])=>$(k).value=v);
+      styleCheck.forEach(f=>$(f).checked=true);
+      refreshLabels(); send(); toast('↺ Style réinitialisé.');
+    });
+
+    // ---- aperçu + onglets ----
+    const scalePreview = () => { const fr=preview.parentElement; if(fr&&fr.clientWidth>0) { preview.style.transform='scale('+(fr.clientWidth/1920)+')'; fr.style.height=(fr.clientWidth*9/16)+'px'; } };
+    window.addEventListener('resize', scalePreview);
+    if ('ResizeObserver' in window) new ResizeObserver(scalePreview).observe(preview.parentElement);
+    preview.addEventListener('load', scalePreview);
+    document.querySelectorAll('.mobile-tabs button').forEach(btn=>btn.addEventListener('click',()=>{
+      const t=btn.dataset.target;
+      document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===t));
+      document.querySelectorAll('.mobile-tabs button').forEach(b=>b.classList.toggle('active',b===btn));
+      scalePreview();
+    }));
+
+    // ---- voyant : l'overlay de la source OBS répond-il ? ----
+    const checkLink = () => {
+      let t=0; try { t=Number(localStorage.getItem('uaz-live-ping'))||0; } catch(e){}
+      const ok = Date.now()-t < 6000, el=$('link');
+      el.className='link '+(ok?'ok':'ko');
+      $('linkTxt').innerHTML = ok ? 'Overlay OBS connecté'
+        : '<b>Overlay OBS non détecté.</b> Vérifie que la source « UAZ LIVE » est dans la scène en cours et, dans ses propriétés, '
+          +'que « Fichier local » est <b>décoché</b> avec l\'URL <code>file:///C:/Users/harylala/Documents/HTML%20OVERLAY/uaz-live.html</code>';
+    };
+    checkLink(); setInterval(checkLink, 2000);
+
+    // ---- init : reprend l'état réel sans rien relancer à l'écran ----
+    loadDock(); refreshLabels();
+    send(); renderPeople();
+    preview.src = 'uaz-live.html?preview=1';
+    scalePreview();
+  </script>
+</body>
+</html>

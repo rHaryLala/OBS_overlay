@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Speaker Lower Third</title>
+  <style>
+    :root {
+      --accent: #b08d4f;
+      --bar-start: #123a8f;
+      --bar-end:   #0a2258;
+      --role-size: 16px;
+      --name-size: 40px;
+      --details-size: 20px;
+      --logo-opacity: 0.12;
+    }
+
+    html, body {
+      width: 100%; height: 100%; margin: 0;
+      overflow: hidden; background: transparent;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    /* Bas de l'écran, collé VRAIMENT à gauche */
+    .stage {
+      position: absolute; inset: 0;
+      display: flex; align-items: flex-end; justify-content: flex-start;
+      padding: 0 0 48px 0;
+      box-sizing: border-box;
+    }
+
+    .bar {
+      position: relative;
+      display: inline-flex; flex-direction: column; gap: 4px;
+      min-width: 460px; max-width: 94vw;
+      padding: 20px 66px 20px 44px;
+      background: linear-gradient(120deg, var(--bar-start), var(--bar-end));
+      border-radius: 0 16px 16px 0;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255,255,255,0.08);
+      color: #fff; overflow: hidden; z-index: 1;
+      /* caché : bande "clippée" à largeur 0 (révélation par balayage) */
+      clip-path: inset(0 100% 0 0);
+      will-change: clip-path;
+    }
+    /* Bande d'accent verticale à gauche (comme le bloc orange de la réf) */
+    .bar::before {
+      content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 9px; z-index: 3;
+      background: var(--accent);
+    }
+    .sheen {
+      position: absolute; top: 0; bottom: 0; width: 22%; left: -30%; z-index: 1;
+      background: linear-gradient(100deg, transparent, rgba(255,255,255,0.10), transparent);
+      transform: skewX(-18deg); pointer-events: none;
+    }
+
+    /* Filigrane SPARK : dérive de gauche à droite en gravitant (rotation lente) */
+    .bg-logo {
+      position: absolute; top: 50%; left: 0; z-index: 0;
+      height: 175%; width: auto; max-width: none;
+      opacity: var(--logo-opacity, 0.12);
+      transform: translate(-20%, -50%);
+      pointer-events: none; user-select: none;
+      animation: logoDrift 18s linear infinite;
+    }
+    /* Fondu aux extrémités : le rebouclage se fait quand le logo est invisible -> pas de coupure */
+    @keyframes logoDrift {
+      0%   { transform: translate(-20%, -50%) rotate(0deg);   opacity: 0; }
+      14%  { opacity: var(--logo-opacity, 0.12); }
+      86%  { opacity: var(--logo-opacity, 0.12); }
+      100% { transform: translate(110%, -50%) rotate(360deg); opacity: 0; }
+    }
+
+    /* Contenu texte au-dessus du filigrane */
+    .content {
+      position: relative; z-index: 2;
+      display: flex; flex-direction: column; gap: 4px; min-width: 0;
+    }
+
+    .bar.is-visible {
+      clip-path: inset(0 0 0 0);
+      transition: clip-path .6s cubic-bezier(.76, 0, .24, 1);
+    }
+    .bar.is-visible .sheen { animation: sheen 1.2s ease .55s 1 both; }
+    .bar.is-hiding {
+      clip-path: inset(0 0 0 100%);
+      transition: clip-path .45s cubic-bezier(.76, 0, .24, 1);
+    }
+    @keyframes sheen { from { left: -30%; } to { left: 130%; } }
+
+    /* Bloc d'accent qui balaie la bande pour la révéler (effet "bloc volant") */
+    .flash {
+      position: absolute; inset: 0; z-index: 4;
+      background: var(--accent); transform: translateX(-101%);
+      pointer-events: none;
+    }
+    .bar.is-visible .flash { animation: flashSweep .7s cubic-bezier(.7, 0, .2, 1) both; }
+    @keyframes flashSweep {
+      0%   { transform: translateX(-101%); }
+      100% { transform: translateX(101%); }
+    }
+
+    /* Décor : équerre (coin) en haut à droite qui vole */
+    .deco-frame {
+      position: absolute; top: 11px; right: 16px; width: 40px; height: 18px; z-index: 3;
+      border-top: 2px solid rgba(255, 255, 255, 0.85);
+      border-right: 2px solid rgba(255, 255, 255, 0.85);
+      opacity: 0;
+    }
+    .bar.is-visible .deco-frame { animation: decoIn .5s ease .5s both; }
+    @keyframes decoIn {
+      0%   { opacity: 0; transform: translate(12px, -8px); }
+      100% { opacity: 1; transform: translate(0, 0); }
+    }
+
+    /* Décor : petits carrés qui surgissent en bas à droite */
+    .deco-dots { position: absolute; right: 18px; bottom: 12px; display: flex; gap: 4px; align-items: flex-end; z-index: 3; }
+    .deco-dots i { display: block; width: 7px; height: 7px; background: rgba(255, 255, 255, 0.8); opacity: 0; transform: scale(0); }
+    .deco-dots i:nth-child(2) { height: 11px; }
+    .deco-dots i:nth-child(3) { height: 14px; background: var(--accent); }
+    .bar.is-visible .deco-dots i { animation: dotPop .38s cubic-bezier(.2, 1.5, .4, 1) both; }
+    .bar.is-visible .deco-dots i:nth-child(1) { animation-delay: .60s; }
+    .bar.is-visible .deco-dots i:nth-child(2) { animation-delay: .68s; }
+    .bar.is-visible .deco-dots i:nth-child(3) { animation-delay: .76s; }
+    @keyframes dotPop { 0% { opacity: 0; transform: scale(0); } 100% { opacity: 1; transform: scale(1); } }
+
+    .bar .line { opacity: 0; transform: translateY(14px); will-change: transform, opacity; }
+    .bar.is-visible .line { animation: rise .6s cubic-bezier(.18,.9,.22,1) both; }
+    .bar.is-visible .surtitle { animation-delay: .05s; }
+    .bar.is-visible .role    { animation-delay: .12s; }
+    .bar.is-visible .name    { animation-delay: .22s; }
+    .bar.is-visible .details { animation-delay: .34s; }
+    @keyframes rise { 0% { opacity: 0; transform: translateY(14px); } 100% { opacity: 1; transform: translateY(0); } }
+
+    /* Police de l'annonceur : nom en gras MAJUSCULES */
+    .surtitle {
+      font-size: calc(var(--role-size) * 0.72); letter-spacing: 0.24em;
+      color: rgba(255,255,255,0.60); font-weight: 600;
+    }
+    .role {
+      font-size: var(--role-size); letter-spacing: 0.2em;
+      color: var(--accent); font-weight: 700;
+    }
+    .name {
+      font-size: var(--name-size); font-weight: 800;
+      letter-spacing: 0.01em; line-height: 1.03; white-space: nowrap;
+      text-shadow: 0 3px 10px rgba(0,0,0,0.35);
+    }
+    .details { font-size: var(--details-size); color: rgba(255,255,255,0.90); font-weight: 400; }
+    .line:empty { display: none; }
+
+    /* ---- Cadres & ronds flottants autour (style motion design) ---- */
+    /* Le CONTENEUR gère le fondu (une seule transition) ; chaque élément gère sa flottaison. */
+    .floaters {
+      position: absolute; left: 0; bottom: 0; width: min(820px, 66vw); height: 380px;
+      z-index: 0; pointer-events: none;
+      opacity: 0; transition: opacity .6s ease .15s;
+    }
+    .bar.is-visible ~ .floaters { opacity: 1; }
+    .bar.is-hiding  ~ .floaters { opacity: 0; transition: opacity .3s ease; }
+
+    .fl { position: absolute; will-change: transform; }
+    .fl-ring  { border: 2px solid rgba(255, 255, 255, 0.55); border-radius: 50%; }
+    .fl-frame { border: 2px solid rgba(255, 255, 255, 0.40); }
+
+    .fl-ring-1  { width: 46px; height: 46px; left: 636px; bottom: 214px; animation: floatB 6.5s ease-in-out infinite; }
+    .fl-ring-2  { width: 24px; height: 24px; left: 726px; bottom: 118px; border-color: var(--accent); opacity: .85; animation: floatA 5s ease-in-out infinite .4s; }
+    .fl-frame-1 { width: 90px; height: 58px; left: 500px; bottom: 176px; animation: floatA 7s ease-in-out infinite; }
+    .fl-frame-2 { width: 38px; height: 38px; left: 700px; bottom: 258px; animation: floatB 8s ease-in-out infinite .6s; }
+    .fl-dot-1   { width: 9px;  height: 9px;  left: 456px; bottom: 272px; border-radius: 50%; background: var(--accent);        animation: floatA 5.5s ease-in-out infinite .2s; }
+    .fl-dot-2   { width: 7px;  height: 7px;  left: 596px; bottom: 306px; border-radius: 50%; background: rgba(255,255,255,0.85); animation: floatB 6s ease-in-out infinite .8s; }
+
+    @keyframes floatA { 0%, 100% { transform: translateY(0); }            50% { transform: translateY(-16px); } }
+    @keyframes floatB { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-11px) rotate(9deg); } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .bar, .bar .line, .deco-frame, .deco-dots i {
+        transition: none !important; animation: none !important;
+        opacity: 1 !important; transform: none !important;
+      }
+      .bar { clip-path: none !important; }
+      .bg-logo { animation: none !important; }
+      .floaters .fl { animation: none !important; transform: none !important; }
+      .flash { display: none !important; }
+      .bar.is-hiding { opacity: 0 !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="bar">
+      <img class="bg-logo" id="bglogo" src="Logo%20SPARK.png" alt="" onerror="this.style.display='none'">
+      <div class="content">
+        <div class="line surtitle" id="surtitle"></div>
+        <div class="line role" id="role">Développeur</div>
+        <div class="line name" id="name">Rabenamana Hary Lala</div>
+        <div class="line details" id="details">IT - Université Adventiste Zurcher</div>
+      </div>
+      <div class="deco-frame" aria-hidden="true"></div>
+      <div class="deco-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+      <span class="sheen"></span>
+      <span class="flash"></span>
+    </div>
+    <div class="floaters" aria-hidden="true">
+      <span class="fl fl-frame fl-frame-1"></span>
+      <span class="fl fl-frame fl-frame-2"></span>
+      <span class="fl fl-ring fl-ring-1"></span>
+      <span class="fl fl-ring fl-ring-2"></span>
+      <span class="fl fl-dot fl-dot-1"></span>
+      <span class="fl fl-dot fl-dot-2"></span>
+    </div>
+  </div>
+
+  <script src="overlay-stack.js"></script>
+  <script>
+    // URL STATIQUE : dans OBS -> file:///…/lower-third-speaker.html
+    // Piloté par le dock via localStorage (BroadcastChannel + storage + polling 300 ms).
+    const CHANNEL = 'lower-third';
+    const STATE_KEY = 'lt-state-v2';   // { config, visible, seq, action }
+    const root = document.documentElement;
+    const bar = document.querySelector('.bar');
+    const nameEl = document.getElementById('name');
+    const bgLogo = document.getElementById('bglogo');
+    const DEFAULT_LOGO = 'Logo%20SPARK.png';
+    const setLogo = (v) => {
+      if (!bgLogo) return;
+      if (v === '') { bgLogo.style.display = 'none'; return; }
+      bgLogo.style.display = '';
+      bgLogo.src = (v && v.length) ? v : DEFAULT_LOGO;
+    };
+
+    const TEXT_KEYS = ['surtitle', 'role', 'name', 'details'];
+    const VAR_MAP = {
+      accent: '--accent',
+      barStart: '--bar-start',
+      barEnd: '--bar-end',
+      roleSize: '--role-size',
+      nameSize: '--name-size',
+      detailsSize: '--details-size',
+      logoOpacity: '--logo-opacity'
+    };
+
+    let currentDuration = 0;
+    let hideTimer = null;
+
+    // Nom sur une ligne ; s'il dépasse, sa police se réduit (jamais coupé/retour ligne).
+    const fitName = () => {
+      nameEl.style.fontSize = '';
+      let size = parseFloat(getComputedStyle(nameEl).fontSize) || 40;
+      let guard = 0;
+      while (nameEl.scrollWidth > nameEl.clientWidth + 1 && size > 16 && guard < 100) {
+        size -= 1; nameEl.style.fontSize = size + 'px'; guard++;
+      }
+    };
+
+    const applyConfig = (cfg) => {
+      if (!cfg) return;
+      TEXT_KEYS.forEach((k) => {
+        if (cfg[k] != null) document.getElementById(k).textContent = cfg[k];
+      });
+      Object.entries(VAR_MAP).forEach(([k, cssVar]) => {
+        if (cfg[k] != null && cfg[k] !== '') root.style.setProperty(cssVar, cfg[k]);
+      });
+      if (cfg.logo !== undefined) setLogo(cfg.logo);
+      if (cfg.duration != null && cfg.duration !== '') {
+        const d = Number(cfg.duration);
+        if (Number.isFinite(d)) currentDuration = d;
+      }
+      fitName();
+    };
+
+    const scheduleHide = () => {
+      clearTimeout(hideTimer);
+      if (Number.isFinite(currentDuration) && currentDuration > 0) {
+        hideTimer = setTimeout(hide, currentDuration * 1000);
+      }
+    };
+
+    function show() {
+      clearTimeout(hideTimer);
+      fitName();
+      bar.classList.remove('is-hiding', 'is-visible');
+      void bar.offsetWidth;
+      bar.classList.add('is-visible');
+      scheduleHide();
+    }
+
+    function hide() {
+      clearTimeout(hideTimer);
+      bar.classList.remove('is-visible');
+      bar.classList.add('is-hiding');
+    }
+
+    window.addEventListener('resize', fitName);
+
+    // ---- Mode URL autonome (secours) ----
+    const params = new URLSearchParams(location.search);
+    const CONFIG_PARAMS = ['surtitle', 'role', 'name', 'details', 'duration', 'exitAfter', 'accent', 'barStart', 'barEnd', 'roleSize', 'nameSize', 'detailsSize', 'logoOpacity'];
+    const hasConfigParams = CONFIG_PARAMS.some((k) => params.has(k));
+    const forceShow = params.get('preview') === '1';
+
+    if (hasConfigParams) {
+      const cfg = {};
+      CONFIG_PARAMS.forEach((k) => { if (params.has(k)) cfg[k] = params.get(k); });
+      if (params.has('exitAfter')) cfg.duration = params.get('exitAfter');
+      applyConfig(cfg);
+      setTimeout(show, 30);
+    } else {
+      const readState = () => {
+        try { return JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); }
+        catch (e) { return null; }
+      };
+
+      let lastSeq = null;
+      let lastConfigJSON = '';
+
+      const applyState = (s) => {
+        if (!s) return;
+        if (s.config) {
+          const j = JSON.stringify(s.config);
+          if (j !== lastConfigJSON) { applyConfig(s.config); lastConfigJSON = j; }
+        }
+        if (s.seq !== lastSeq) {
+          lastSeq = s.seq;
+          if (s.action === 'show' || (s.action == null && s.visible)) show();
+          else if (s.action === 'hide') hide();
+        }
+      };
+
+      const init = readState();
+      if (init) {
+        applyConfig(init.config);
+        lastConfigJSON = JSON.stringify(init.config || {});
+        lastSeq = init.seq;
+        // NE PAS ré-afficher l'état sauvegardé au chargement (ex. changement de scène OBS) :
+        // le lower-third reste masqué et n'apparaît que sur un NOUVEL « Afficher » du dock.
+        // (l'aperçu du dock, ?preview=1, s'affiche quand même)
+        if (forceShow) setTimeout(show, 40);
+      } else if (forceShow) {
+        setTimeout(show, 40);
+      }
+
+      if ('BroadcastChannel' in window) {
+        const ch = new BroadcastChannel(CHANNEL);
+        ch.onmessage = (e) => applyState(e.data);
+      }
+      window.addEventListener('storage', (e) => { if (e.key === STATE_KEY) applyState(readState()); });
+      setInterval(() => applyState(readState()), 300);
+    }
+
+    // ---- Pile d'overlays : publie l'espace occupé en bas (bandeau bas-gauche) ----
+    if (window.OverlayStack && !forceShow) {
+      OverlayStack.registerPublisher('lower-third', () => {
+        if (!bar.classList.contains('is-visible')) return 0;
+        const r = bar.getBoundingClientRect();                 // clip-path n'affecte pas le rect
+        return Math.max(0, (window.innerHeight - r.top) / window.innerHeight);
+      }, 500);
+    }
+  </script>
+</body>
+</html>

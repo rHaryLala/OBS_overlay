@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guide — Drone DJI dans OBS (RTMP)</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --card:#ffffff; --ink:#131a2a; --mut:#5b6b85; --line:#e3e8f2;
+    --brand:#1e5fd6; --brandink:#0e2d6b; --accent:#b9842f; --ok:#16a34a; --warn:#d97706; --bad:#dc2626;
+    --code:#0f1626; --codeink:#e8eefc;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#0b1020; --card:#121a2c; --ink:#eaf0fb; --mut:#9fb0cc; --line:#223049;
+      --brand:#5b9bff; --brandink:#bcd4ff; --code:#060b16; }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55;padding:28px 16px 70px}
+  .wrap{max-width:860px;margin:0 auto}
+  header{text-align:center;margin-bottom:22px}
+  .kicker{display:inline-block;background:var(--brand);color:#fff;font-weight:700;letter-spacing:.08em;
+    font-size:12px;padding:5px 12px;border-radius:999px;text-transform:uppercase}
+  h1{font-size:28px;margin:12px 0 6px}
+  header p{color:var(--mut);margin:0;font-size:15px}
+  .chain{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;margin:16px 0 4px;
+    color:var(--mut);font-size:13px;font-weight:600}
+  .chain b{color:var(--ink)} .chain .ar{color:var(--brand);font-weight:800}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:16px 0;
+    box-shadow:0 1px 2px rgba(10,20,40,.04)}
+  .step{display:flex;gap:14px;align-items:flex-start}
+  .num{flex:0 0 auto;width:38px;height:38px;border-radius:10px;background:var(--brand);color:#fff;
+    font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center}
+  .step h2{font-size:19px;margin:4px 0 8px}
+  .step .body{flex:1;min-width:0}
+  ol,ul{margin:8px 0;padding-left:20px} li{margin:5px 0}
+  .hint{color:var(--mut);font-size:13.5px}
+
+  code.inl{background:rgba(120,140,180,.14);padding:1px 6px;border-radius:5px;font-family:Consolas,monospace;font-size:13.5px}
+  .copy{position:relative;background:var(--code);color:var(--codeink);border-radius:10px;padding:12px 44px 12px 14px;
+    font-family:Consolas,"Courier New",monospace;font-size:14.5px;margin:10px 0;overflow-x:auto;white-space:nowrap}
+  .copy button{position:absolute;top:7px;right:7px;background:#223049;color:#cfe0ff;border:0;border-radius:7px;
+    padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer}
+  .copy button:hover{background:#2e4260}
+  .copy button.done{background:var(--ok);color:#fff}
+
+  .call{border-left:4px solid var(--brand);background:rgba(30,95,214,.07);padding:11px 14px;border-radius:0 10px 10px 0;margin:12px 0;font-size:14px}
+  .call.warn{border-color:var(--warn);background:rgba(217,119,6,.09)}
+  .call.ok{border-color:var(--ok);background:rgba(22,163,74,.09)}
+  .call b{color:var(--ink)}
+
+  .need{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+  .need div{background:rgba(120,140,180,.08);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px}
+  .need b{display:block;margin-bottom:2px}
+
+  table{width:100%;border-collapse:collapse;margin-top:6px;font-size:14px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  td b{color:var(--ink)}
+
+  .set{width:100%;border-collapse:collapse;font-size:14px}
+  .set td{padding:7px 10px;border-bottom:1px solid var(--line)}
+  .set td:first-child{color:var(--mut);width:48%}
+  .chk{list-style:none;padding:0}
+  .chk li{padding-left:28px;position:relative}
+  .chk li::before{content:"";position:absolute;left:0;top:3px;width:16px;height:16px;border:2px solid var(--brand);border-radius:4px}
+
+  .foot{text-align:center;color:var(--mut);font-size:12.5px;margin-top:24px}
+  @media print{ body{background:#fff;padding:0} .card{box-shadow:none;break-inside:avoid} .copy button{display:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="kicker">Guide pas à pas</span>
+    <h1>🚁 Flux du drone DJI dans OBS</h1>
+    <p>Recevoir la vidéo de ton drone (DJI&nbsp;Neo + manette) directement dans OBS, en RTMP, sur ton PC.</p>
+    <div class="chain">
+      <b>Drone</b><span class="ar">→</span><b>Manette RC</b><span class="ar">→</span><b>Téléphone (DJI&nbsp;Fly)</b>
+      <span class="ar">→ Wi-Fi →</span><b>Serveur PC</b><span class="ar">→</span><b>OBS</b>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2 style="margin-top:0">✅ Ce qu'il te faut</h2>
+    <div class="need">
+      <div><b>Le PC avec OBS</b>celui qui diffuse la cérémonie</div>
+      <div><b>Drone DJI Neo + manette RC</b>piloté avec la manette (pas au téléphone seul)</div>
+      <div><b>Même Wi-Fi</b>le téléphone de la manette ET le PC sur le même routeur</div>
+      <div><b>mediamtx.exe</b>le petit serveur (gratuit) — voir Étape&nbsp;1</div>
+    </div>
+    <div class="call warn"><b>Pourquoi la manette&nbsp;?</b> Avec la manette RC, le lien drone passe par la radio de la manette, ce qui <b>libère le Wi-Fi du téléphone</b> pour envoyer le flux au PC. Au téléphone seul, le Wi-Fi est pris par le drone → impossible en local.</div>
+  </div>
+
+  <!-- ÉTAPE 1 -->
+  <div class="card"><div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h2>Installer le serveur (MediaMTX)</h2>
+      <ol>
+        <li>Va sur : <code class="inl">github.com/bluenviron/mediamtx/releases</code></li>
+        <li>Télécharge le fichier <b>mediamtx_…_windows_amd64.zip</b></li>
+        <li>Fais un <b>clic droit → Extraire tout</b> sur le .zip</li>
+        <li>Prends le fichier <b><code class="inl">mediamtx.exe</code></b> et <b>place-le dans ce dossier :</b></li>
+      </ol>
+      <div class="copy"><span>C:\Users\harylala\Documents\HTML OVERLAY</span><button onclick="cp(this)">Copier</button></div>
+      <p class="hint">C'est le même dossier que « Serveur DRONE (RTMP).bat ». À faire une seule fois.</p>
+    </div>
+  </div></div>
+
+  <!-- ÉTAPE 2 -->
+  <div class="card"><div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h2>Démarrer le serveur</h2>
+      <ol>
+        <li><b>Double-clique</b> sur <b>« Serveur DRONE (RTMP).bat »</b></li>
+        <li>Une fenêtre noire s'ouvre et affiche <b>ton adresse</b> (type <code class="inl">rtmp://192.168.x.x:1935/live/drone</code>).</li>
+        <li><b>⚠️ Laisse cette fenêtre OUVERTE</b> pendant tout le direct.</li>
+      </ol>
+      <div class="call warn"><b>Pare-feu Windows :</b> au 1<sup>er</sup> lancement, si une fenêtre bleue apparaît, clique <b>« Autoriser l'accès »</b> (sinon le drone ne pourra pas se connecter). Astuce : lance le .bat en <b>clic droit → Exécuter en tant qu'administrateur</b> une fois, il ouvre le port tout seul.</div>
+      <p class="hint">Sur ce PC, ton adresse détectée est&nbsp;: <b id="ipline">rtmp://192.168.88.13:1935/live/drone</b> <span class="hint">(elle peut changer selon le Wi-Fi — fie-toi toujours à celle affichée par le .bat).</span></p>
+    </div>
+  </div></div>
+
+  <!-- ÉTAPE 3 -->
+  <div class="card"><div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h2>Configurer le drone (DJI&nbsp;Fly)</h2>
+      <ol>
+        <li>Branche le téléphone sur la <b>manette RC</b>, drone allumé.</li>
+        <li>Sur le téléphone, <b>connecte-toi au même Wi-Fi que le PC</b>.</li>
+        <li>Ouvre <b>DJI&nbsp;Fly</b> → menu <b>···</b> (en haut à droite) → <b>Diffusion en direct</b> (Live Streaming).</li>
+        <li>Choisis <b>RTMP</b> / <b>Plateforme personnalisée</b>.</li>
+        <li>Colle l'adresse affichée par le .bat :</li>
+      </ol>
+      <div class="copy"><span>rtmp://192.168.88.13:1935/live/drone</span><button onclick="cp(this)">Copier</button></div>
+      <p class="hint">Si DJI te demande <b>deux champs séparés</b> (Serveur + Clé) :</p>
+      <table class="set">
+        <tr><td>Serveur (URL)</td><td><code class="inl">rtmp://192.168.88.13:1935/live</code></td></tr>
+        <tr><td>Clé de flux (Stream key)</td><td><code class="inl">drone</code></td></tr>
+      </table>
+      <ol start="6"><li>Appuie sur <b>Démarrer la diffusion</b>.</li></ol>
+      <div class="call"><b>Pas de « RTMP » dans DJI Fly&nbsp;?</b> Mets à jour l'appli <b>DJI&nbsp;Fly</b> et le <b>firmware</b> du drone, puis réessaie.</div>
+    </div>
+  </div></div>
+
+  <!-- ÉTAPE 4 -->
+  <div class="card"><div class="step">
+    <div class="num">4</div>
+    <div class="body">
+      <h2>Ajouter le drone dans OBS</h2>
+      <ol>
+        <li>Dans <b>Sources</b> → <b>+</b> → choisis <b>« Source Média »</b> <span class="hint">(⚠️ PAS « Source Navigateur »)</span>.</li>
+        <li>Décoche <b>« Fichier local »</b>.</li>
+        <li>Dans <b>Entrée</b> (Input), colle :</li>
+      </ol>
+      <div class="copy"><span>rtmp://127.0.0.1:1935/live/drone</span><button onclick="cp(this)">Copier</button></div>
+      <p class="hint"><code class="inl">127.0.0.1</code> = « ce PC lui-même ». Dans OBS on lit toujours en local, peu importe l'IP du drone.</p>
+      <table class="set">
+        <tr><td>Fichier local</td><td>☐ décoché</td></tr>
+        <tr><td>Entrée</td><td><code class="inl">rtmp://127.0.0.1:1935/live/drone</code></td></tr>
+        <tr><td>Format d'entrée</td><td>(laisser vide)</td></tr>
+        <tr><td>Mémoire tampon réseau</td><td>au minimum</td></tr>
+        <tr><td>Redémarrer quand la scène devient active</td><td>☐ décoché</td></tr>
+        <tr><td>Décodage matériel si disponible</td><td>☑ coché</td></tr>
+      </table>
+      <ol start="4"><li>Clique <b>OK</b>.</li></ol>
+      <div class="call ok"><b>Ça marche&nbsp;?</b> La vue du drone apparaît dans la scène. Latence normale : <b>2 à 4 secondes</b>.</div>
+    </div>
+  </div></div>
+
+  <!-- ORDRE JOUR J -->
+  <div class="card">
+    <h2 style="margin-top:0">📋 L'ordre à respecter le jour J</h2>
+    <ul class="chk">
+      <li><b>1.</b> Double-clic <b>« Serveur DRONE (RTMP).bat »</b> (laisser ouvert)</li>
+      <li><b>2.</b> Téléphone (sur la manette) connecté au <b>Wi-Fi du PC</b></li>
+      <li><b>3.</b> DJI&nbsp;Fly → RTMP → <b>Démarrer la diffusion</b></li>
+      <li><b>4.</b> OBS → la <b>Source Média</b> affiche le drone (clic droit → <b>Actualiser</b> si noir)</li>
+    </ul>
+    <div class="call warn"><b>Important :</b> démarre le flux dans DJI Fly <b>AVANT</b> d'ouvrir/actualiser la source OBS, sinon OBS reste noir.</div>
+  </div>
+
+  <!-- DÉPANNAGE -->
+  <div class="card">
+    <h2 style="margin-top:0">🧯 Si ça ne marche pas</h2>
+    <table>
+      <tr><th>Symptôme</th><th>Solution</th></tr>
+      <tr><td><b>OBS reste noir</b></td><td>Le flux doit <b>déjà tourner</b>. Ordre : serveur → DJI Fly « Démarrer » → <b>puis</b> OBS (clic droit sur la source → <b>Actualiser</b>).</td></tr>
+      <tr><td><b>DJI Fly : « échec de connexion »</b></td><td>① Téléphone et PC sur le <b>même Wi-Fi</b>. ② <b>Pare-feu</b> : relance le .bat en <b>administrateur</b>, ou autorise <code class="inl">mediamtx.exe</code>. ③ Vérifie que l'adresse (IP) est bien celle affichée par le .bat.</td></tr>
+      <tr><td><b>Pas de « RTMP » dans DJI Fly</b></td><td>Mets à jour <b>DJI Fly</b> + le <b>firmware</b> du drone.</td></tr>
+      <tr><td><b>Image saccadée / coupures</b></td><td>Wi-Fi faible : rapproche le téléphone de la box, ou baisse le <b>débit</b> de diffusion dans DJI Fly.</td></tr>
+      <tr><td><b>La fenêtre noire se ferme aussitôt</b></td><td><code class="inl">mediamtx.exe</code> n'est pas dans le dossier → refais l'<b>Étape 1</b>.</td></tr>
+      <tr><td><b>L'IP a changé</b></td><td>Normal si tu changes de Wi-Fi. Reprends l'adresse <b>affichée par le .bat</b> et remets-la dans DJI Fly.</td></tr>
+    </table>
+  </div>
+
+  <div class="foot">SPARK 2026 · Université Adventiste Zurcher — Guide drone → OBS (RTMP)</div>
+</div>
+
+<script>
+  function cp(btn){
+    const t = btn.parentElement.querySelector('span').textContent;
+    navigator.clipboard.writeText(t).then(()=>{ btn.textContent='Copié ✓'; btn.classList.add('done');
+      setTimeout(()=>{ btn.textContent='Copier'; btn.classList.remove('done'); },1500); })
+    .catch(()=>{ btn.textContent='—'; });
+  }
+</script>
+</body>
+</html>

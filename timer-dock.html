@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minuteur — Régie</title>
+  <link rel="stylesheet" href="dock-ui.css">
+  <style>
+    .preview-frame { position: relative; overflow: hidden; }
+    #preview { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; transform-origin: top left; border: 0; }
+    .bigclock { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 40px; letter-spacing: .02em; text-align: center; color: hsl(var(--foreground)); }
+    .chk { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: hsl(var(--foreground)); cursor: pointer; padding: 4px 0; }
+    .chk input { width: 18px; height: 18px; accent-color: hsl(var(--brand)); }
+    .mode-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: hsl(var(--muted)); padding: 4px; border-radius: calc(var(--radius) - .2rem); }
+    .mode-seg button { border: 0; background: transparent; padding: 8px; border-radius: calc(var(--radius) - .35rem); font: inherit; font-weight: 600; font-size: 13px; color: hsl(var(--muted-foreground)); cursor: pointer; }
+    .mode-seg button.active { background: hsl(var(--card)); color: hsl(var(--foreground)); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+
+    .mobile-tabs { display: none; }
+    @media (max-width: 880px) {
+      body { padding: 0; }
+      .mobile-app { display: flex; flex-direction: column; height: 100dvh; }
+      .page-header { padding: 10px 14px; margin: 0; gap: 8px; border-bottom: 1px solid hsl(var(--border)); }
+      .page-header h1 { font-size: 16px; } .page-header .desc { display: none; }
+      .app-grid { flex: 1; min-height: 0; display: block; position: relative; gap: 0; }
+      .app-grid > .col { display: contents; }
+      .panel { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px; display: none; }
+      .panel.active { display: block; }
+      .card { box-shadow: none; border-radius: 12px; }
+      .mobile-tabs { display: grid; grid-template-columns: repeat(3, 1fr); background: hsl(var(--card)); border-top: 1px solid hsl(var(--border)); padding-bottom: env(safe-area-inset-bottom, 0); }
+      .mobile-tabs button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 4px; background: none; border: 0; cursor: pointer; color: hsl(var(--muted-foreground)); font: inherit; font-size: 17px; line-height: 1; }
+      .mobile-tabs button span { font-size: 10.5px; font-weight: 500; }
+      .mobile-tabs button.active { color: hsl(var(--brand)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container mobile-app">
+    <div class="page-header">
+      <h1>⏱️ Minuteur</h1>
+      <span class="desc">Décompte ou chronomètre pour OBS.</span>
+      <span class="badge badge-off" id="onair" style="margin-left:auto">● Hors antenne</span>
+    </div>
+
+    <div class="app-grid">
+      <div class="col">
+        <section class="panel active" data-panel="direct">
+        <div class="card">
+          <div class="card-header"><div class="card-title">▶ Contrôle</div></div>
+          <div class="card-content">
+            <div class="mode-seg" id="modeSeg">
+              <button data-mode="down" class="active">⏳ Décompte</button>
+              <button data-mode="up">⏱️ Chronomètre</button>
+            </div>
+
+            <div class="bigclock" id="bigclock">00:00</div>
+
+            <div class="field" id="durationField">
+              <label class="label">Durée du décompte</label>
+              <div class="grid-2">
+                <div class="row" style="gap:6px"><input class="input" id="durMin" type="number" min="0" max="599" value="10"><span class="muted text-sm">min</span></div>
+                <div class="row" style="gap:6px"><input class="input" id="durSec" type="number" min="0" max="59" value="0"><span class="muted text-sm">sec</span></div>
+              </div>
+              <div class="btn-row" style="margin-top:6px">
+                <button class="btn btn-outline btn-sm" data-set="300">5:00</button>
+                <button class="btn btn-outline btn-sm" data-set="600">10:00</button>
+                <button class="btn btn-outline btn-sm" data-set="900">15:00</button>
+                <button class="btn btn-ghost btn-sm" data-add="60">+1:00</button>
+              </div>
+            </div>
+
+            <div class="btn-row">
+              <button class="btn btn-brand" id="startBtn">Démarrer</button>
+              <button class="btn btn-secondary" id="pauseBtn">Pause</button>
+              <button class="btn btn-outline" id="resetBtn">↺ Réinit.</button>
+            </div>
+            <hr class="separator">
+            <div class="btn-row">
+              <button class="btn btn-primary" id="showBtn">Afficher</button>
+              <button class="btn btn-secondary" id="hideBtn">Masquer</button>
+            </div>
+            <div class="status" id="status"></div>
+          </div>
+        </div>
+        </section>
+      </div>
+
+      <div class="col">
+        <section class="panel" data-panel="preview">
+        <div class="card">
+          <div class="card-header"><div class="card-title">👁️ Aperçu</div></div>
+          <div class="card-content"><div class="preview-frame"><iframe id="preview" title="Aperçu minuteur"></iframe></div></div>
+        </div>
+        </section>
+
+        <section class="panel" data-panel="style">
+        <div class="card">
+          <div class="card-header"><div class="card-title">🎨 Style & contenu</div></div>
+          <div class="card-content">
+            <div class="field">
+              <label class="label" for="label">Libellé (au-dessus) <span class="hint">optionnel</span></label>
+              <input class="input" id="label" type="text" placeholder="ex : REPRISE DANS" value="">
+            </div>
+            <div class="field">
+              <label class="label" for="endText">Texte à la fin (décompte à 0) <span class="hint">optionnel</span></label>
+              <input class="input" id="endText" type="text" placeholder="ex : C'EST PARTI !" value="">
+            </div>
+            <div class="field">
+              <label class="label" for="position">Position</label>
+              <select class="input" id="position">
+                <option value="center">Centré</option>
+                <option value="top">En haut</option>
+                <option value="bottom">En bas</option>
+                <option value="top-right">Haut droite</option>
+                <option value="bottom-right">Bas droite</option>
+                <option value="bottom-left">Bas gauche</option>
+              </select>
+            </div>
+            <div class="grid-3">
+              <div class="field"><label class="label" for="accent">Accent</label><input class="color" id="accent" type="color" value="#b08d4f"></div>
+              <div class="field"><label class="label" for="bg1">Fond haut</label><input class="color" id="bg1" type="color" value="#0b2a6b"></div>
+              <div class="field"><label class="label" for="bg2">Fond bas</label><input class="color" id="bg2" type="color" value="#071a45"></div>
+            </div>
+            <div class="field">
+              <label class="label" for="timeSize">Taille des chiffres <span class="hint tabnum" id="timeSizeVal">120 px</span></label>
+              <input id="timeSize" type="range" min="40" max="260" value="120" style="width:100%">
+            </div>
+            <div class="field">
+              <label class="label" for="labelSize">Taille du libellé <span class="hint tabnum" id="labelSizeVal">26 px</span></label>
+              <input id="labelSize" type="range" min="12" max="52" value="26" style="width:100%">
+            </div>
+            <hr class="separator">
+            <label class="chk"><input type="checkbox" id="card" checked> Afficher le fond (carte)</label>
+            <label class="chk"><input type="checkbox" id="blinkAtZero" checked> Clignoter à zéro</label>
+            <label class="chk"><input type="checkbox" id="showHours"> Afficher les heures (H:MM:SS)</label>
+          </div>
+          <div class="card-footer">
+            <button class="btn btn-outline btn-sm" id="copyBtn">📋 Copier l'URL overlay</button>
+            <button class="btn btn-ghost btn-sm" id="resetStyleBtn">↺ Réinitialiser le style</button>
+          </div>
+        </div>
+        </section>
+      </div>
+    </div>
+
+    <nav class="mobile-tabs">
+      <button data-target="direct" class="active">▶<span>Contrôle</span></button>
+      <button data-target="style">🎨<span>Style</span></button>
+      <button data-target="preview">👁️<span>Aperçu</span></button>
+    </nav>
+  </div>
+
+  <script>
+    const CHANNEL = 'timer';
+    const STATE_KEY = 'timer-state';
+    const DOCK_KEY = 'timer-dock';
+    const channel = ('BroadcastChannel' in window) ? new BroadcastChannel(CHANNEL) : null;
+    const $ = (id) => document.getElementById(id);
+    const preview = $('preview'), statusEl = $('status'), onair = $('onair');
+
+    const styleText = ['label','endText','position','accent','bg1','bg2','timeSize','labelSize'];
+    const styleCheck = ['card','blinkAtZero','showHours'];
+    const sizeFields = ['timeSize','labelSize'];
+
+    // ---- état runtime du minuteur ----
+    let mode = 'down', running = false, durationMs = 600000, remainingMs = 600000,
+        endAt = null, startAt = null, elapsedMs = 0, visible = false, seq = 0;
+
+    const folderUrl = () => { const p = location.pathname; return 'file:///' + p.substring(0, p.lastIndexOf('/') + 1).replace(/\\/g, '/'); };
+    const baseUrl = folderUrl() + 'timer-overlay.html';
+
+    const buildState = (action) => {
+      const st = {
+        mode, running, durationMs, endAt, remainingMs, startAt, elapsedMs,
+        label: $('label').value, endText: $('endText').value, position: $('position').value,
+        accent: $('accent').value, bg1: $('bg1').value, bg2: $('bg2').value,
+        timeSize: $('timeSize').value + 'px', labelSize: $('labelSize').value + 'px',
+        card: $('card').checked, blinkAtZero: $('blinkAtZero').checked, showHours: $('showHours').checked,
+        visible, seq, action
+      };
+      localStorage.setItem(STATE_KEY, JSON.stringify(st));
+      saveDock();
+      if (channel) channel.postMessage(st);
+      return st;
+    };
+    const push = () => buildState('update');
+
+    const setVisible = (v) => {
+      visible = v;
+      onair.className = 'badge ' + (v ? 'badge-live' : 'badge-off');
+      onair.innerHTML = v ? '<span class="dot"></span> À l\'antenne' : '● Hors antenne';
+      onair.style.marginLeft = 'auto';
+    };
+
+    const toast = (m) => { statusEl.textContent = m; statusEl.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => statusEl.classList.remove('show'), 2400); };
+
+    // ---- lecture du temps (pour l'affichage du dock) ----
+    const computeMs = () => {
+      const now = Date.now();
+      if (mode === 'up') return running ? Math.max(0, now - startAt) : elapsedMs;
+      return Math.max(0, running ? (endAt - now) : remainingMs);
+    };
+    const fmt = (ms) => { let t = Math.round(ms/1000); const h=Math.floor(t/3600); t%=3600; const m=Math.floor(t/60), s=t%60; const p=n=>String(n).padStart(2,'0'); return ($('showHours').checked || h>0) ? h+':'+p(m)+':'+p(s) : p(m)+':'+p(s); };
+    setInterval(() => {
+      if (running && mode === 'down' && endAt != null && endAt - Date.now() <= 0) {
+        running = false; remainingMs = 0; endAt = null; push();   // auto-stop à zéro
+      }
+      $('bigclock').textContent = fmt(computeMs());
+    }, 200);
+
+    // ---- contrôles ----
+    const readDuration = () => durationMs = ((parseInt($('durMin').value,10)||0)*60 + (parseInt($('durSec').value,10)||0)) * 1000;
+    const writeDuration = () => { $('durMin').value = Math.floor(durationMs/60000); $('durSec').value = Math.floor((durationMs%60000)/1000); };
+
+    $('startBtn').addEventListener('click', () => {
+      if (mode === 'down') { if (remainingMs <= 0) remainingMs = durationMs; endAt = Date.now() + remainingMs; }
+      else { startAt = Date.now() - elapsedMs; }
+      running = true;
+      if (!visible) { setVisible(true); seq++; buildState('show'); } else push();
+      toast('▶ Démarré.');
+    });
+    $('pauseBtn').addEventListener('click', () => {
+      if (!running) return;
+      if (mode === 'down') { remainingMs = Math.max(0, endAt - Date.now()); endAt = null; }
+      else { elapsedMs = Date.now() - startAt; startAt = null; }
+      running = false; push(); toast('⏸ En pause.');
+    });
+    $('resetBtn').addEventListener('click', () => {
+      running = false; endAt = null; startAt = null;
+      if (mode === 'down') { readDuration(); remainingMs = durationMs; } else { elapsedMs = 0; }
+      push(); toast('↺ Réinitialisé.');
+    });
+
+    $('modeSeg').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      $('modeSeg').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+      mode = b.dataset.mode; running = false; endAt = null; startAt = null; elapsedMs = 0;
+      readDuration(); remainingMs = durationMs;
+      $('durationField').style.display = (mode === 'down') ? '' : 'none';
+      push();
+    }));
+
+    const setFresh = () => { running = false; endAt = null; startAt = null; remainingMs = durationMs; };
+    ['durMin','durSec'].forEach(id => $(id).addEventListener('input', () => { readDuration(); setFresh(); push(); }));
+    document.querySelectorAll('[data-set]').forEach(b => b.addEventListener('click', () => { durationMs = +b.dataset.set * 1000; writeDuration(); setFresh(); push(); }));
+    document.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => { durationMs += +b.dataset.add * 1000; writeDuration(); if (!running) remainingMs = durationMs; else if (endAt) { endAt += +b.dataset.add*1000; } push(); }));
+
+    $('showBtn').addEventListener('click', () => { setVisible(true); seq++; buildState('show'); toast('▶ Affiché.'); });
+    $('hideBtn').addEventListener('click', () => { setVisible(false); seq++; buildState('hide'); toast('■ Masqué.'); });
+
+    const refreshSizeLabels = () => sizeFields.forEach(f => { const el = $(f + 'Val'); if (el) el.textContent = $(f).value + ' px'; });
+    [...styleText, ...styleCheck].forEach(f => $(f).addEventListener('input', () => { refreshSizeLabels(); push(); }));
+
+    $('copyBtn').addEventListener('click', () => navigator.clipboard.writeText(baseUrl).then(() => toast('📋 URL copiée.')).catch(() => toast(baseUrl)));
+    $('resetStyleBtn').addEventListener('click', () => {
+      const d = { label:'', endText:'', position:'center', accent:'#b08d4f', bg1:'#0b2a6b', bg2:'#071a45', timeSize:'120', labelSize:'26' };
+      Object.entries(d).forEach(([k,v]) => $(k).value = v);
+      $('card').checked = true; $('blinkAtZero').checked = true; $('showHours').checked = false;
+      refreshSizeLabels(); push(); toast('↺ Style réinitialisé.');
+    });
+
+    // ---- persistance dock ----
+    const saveDock = () => {
+      const o = { mode, durationMs, remainingMs, elapsedMs, style: {} };
+      styleText.forEach(f => o.style[f] = $(f).value);
+      styleCheck.forEach(f => o.style[f] = $(f).checked);
+      localStorage.setItem(DOCK_KEY, JSON.stringify(o));
+    };
+    const loadDock = () => {
+      try {
+        const o = JSON.parse(localStorage.getItem(DOCK_KEY) || '{}');
+        if (o.mode) mode = o.mode;
+        if (o.durationMs) { durationMs = o.durationMs; remainingMs = o.remainingMs ?? o.durationMs; elapsedMs = o.elapsedMs || 0; }
+        if (o.style) { styleText.forEach(f => { if (o.style[f] != null) $(f).value = o.style[f]; }); styleCheck.forEach(f => { if (o.style[f] != null) $(f).checked = o.style[f]; }); }
+      } catch (e) {}
+    };
+
+    // ---- aperçu à l'échelle + onglets ----
+    const scalePreview = () => { const fr = preview.parentElement; if (fr && fr.clientWidth > 0) preview.style.transform = 'scale(' + (fr.clientWidth / 1920) + ')'; };
+    window.addEventListener('resize', scalePreview);
+    if ('ResizeObserver' in window) new ResizeObserver(scalePreview).observe(preview.parentElement);
+    preview.addEventListener('load', scalePreview);
+    document.querySelectorAll('.mobile-tabs button').forEach(btn => btn.addEventListener('click', () => {
+      const t = btn.dataset.target;
+      document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.dataset.panel === t));
+      document.querySelectorAll('.mobile-tabs button').forEach(b => b.classList.toggle('active', b === btn));
+      scalePreview();
+    }));
+
+    // ---- init ----
+    loadDock();
+    $('modeSeg').querySelectorAll('button').forEach(x => x.classList.toggle('active', x.dataset.mode === mode));
+    $('durationField').style.display = (mode === 'down') ? '' : 'none';
+    writeDuration(); refreshSizeLabels(); setVisible(false);
+    try { const prev = JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); if (prev && prev.seq) seq = prev.seq; } catch (e) {}
+    buildState('update');
+    preview.src = baseUrl + '?preview=1';
+    scalePreview();
+  </script>
+</body>
+</html>

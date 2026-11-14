@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Overlay Dock</title>
+  <style>
+    :root {
+      --bg: #08111f;
+      --panel: rgba(11, 18, 34, 0.88);
+      --text: #f5f7fb;
+      --muted: rgba(245, 247, 251, 0.68);
+      --line: rgba(255, 255, 255, 0.12);
+      --accent: #b08d4f;
+      --success: #58c27d;
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      background: linear-gradient(180deg, #07101d 0%, #0b1424 100%);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 28px;
+      margin: 0 0 10px 0;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .section {
+      margin-bottom: 20px;
+    }
+
+    .section:last-child {
+      margin-bottom: 0;
+    }
+
+    .section-title {
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    .field:last-child {
+      margin-bottom: 0;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: rgba(245, 247, 251, 0.74);
+      margin-bottom: 6px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      border-radius: 8px;
+      font: inherit;
+      outline: none;
+      transition: border-color 160ms, background 160ms;
+    }
+
+    input:focus, select:focus {
+      border-color: rgba(90, 167, 255, 0.72);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    button {
+      flex: 1;
+      padding: 11px 16px;
+      border: none;
+      border-radius: 999px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 140ms, opacity 140ms;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: linear-gradient(90deg, var(--accent), #d2b36f);
+      color: #101010;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    .url-output {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 12px;
+      font-family: "Courier New", monospace;
+      font-size: 11px;
+      word-break: break-all;
+      line-height: 1.6;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .status {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      text-align: center;
+      display: none;
+    }
+
+    .status.show {
+      display: block;
+    }
+
+    .status.success {
+      background: rgba(88, 194, 125, 0.2);
+      color: var(--success);
+    }
+
+    .status.info {
+      background: rgba(90, 167, 255, 0.2);
+      color: #5aa7ff;
+    }
+
+    .color-preview {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      vertical-align: middle;
+      margin-left: 8px;
+    }
+
+    .preview-section {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .preview-frame {
+      width: 100%;
+      height: 200px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      margin-top: 12px;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📺 Overlay Dock</h1>
+    <p class="subtitle">Modifie les paramètres et copie l'URL dans OBS</p>
+
+    <div class="card">
+      <!-- Speaker Info -->
+      <div class="section">
+        <div class="section-title">👤 Speaker</div>
+        <div class="field">
+          <label for="role">Rôle</label>
+          <input id="role" type="text" placeholder="ex: Développeur" value="Développeur">
+        </div>
+        <div class="field">
+          <label for="name">Nom</label>
+          <input id="name" type="text" placeholder="ex: John Doe" value="Rabenamana Hary Lala">
+        </div>
+        <div class="field">
+          <label for="details">Détails</label>
+          <input id="details" type="text" placeholder="ex: CEO - Acme Inc" value="IT - Université Adventiste Zurcher">
+        </div>
+      </div>
+
+      <!-- Timing -->
+      <div class="section">
+        <div class="section-title">⏱️ Timing</div>
+        <div class="field">
+          <label for="duration">Durée (secondes)</label>
+          <input id="duration" type="number" value="7" min="1" max="60">
+        </div>
+      </div>
+
+      <!-- Styling -->
+      <div class="section">
+        <div class="section-title">🎨 Styling</div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="barStart">Couleur dégradé début</label>
+            <input id="barStart" type="color" value="#040819">
+          </div>
+          <div class="field">
+            <label for="barEnd">Couleur dégradé fin</label>
+            <input id="barEnd" type="color" value="#1a2870">
+          </div>
+        </div>
+        <div class="field">
+          <label for="accent">Couleur accent</label>
+          <input id="accent" type="color" value="#b08d4f">
+        </div>
+        <div class="grid-3">
+          <div class="field">
+            <label for="roleSize">Rôle (px)</label>
+            <input id="roleSize" type="number" value="16" min="8" max="32">
+          </div>
+          <div class="field">
+            <label for="nameSize">Nom (px)</label>
+            <input id="nameSize" type="number" value="40" min="16" max="64">
+          </div>
+          <div class="field">
+            <label for="detailsSize">Détails (px)</label>
+            <input id="detailsSize" type="number" value="18" min="8" max="32">
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="buttons">
+        <button class="btn-primary" id="copyBtn">📋 Copier l'URL</button>
+        <button class="btn-secondary" id="previewBtn">👁️ Aperçu</button>
+      </div>
+
+      <div class="status" id="status"></div>
+
+      <!-- URL Display -->
+      <div class="url-output" id="urlOutput"></div>
+
+      <!-- Preview -->
+      <div class="preview-section" id="previewSection" style="display: none;">
+        <div class="section-title">Aperçu</div>
+        <iframe id="preview"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const BASE_URL = 'http://localhost:8000/lower-third-speaker.html';
+    
+    const els = {
+      role: document.getElementById('role'),
+      name: document.getElementById('name'),
+      details: document.getElementById('details'),
+      duration: document.getElementById('duration'),
+      barStart: document.getElementById('barStart'),
+      barEnd: document.getElementById('barEnd'),
+      accent: document.getElementById('accent'),
+      roleSize: document.getElementById('roleSize'),
+      nameSize: document.getElementById('nameSize'),
+      detailsSize: document.getElementById('detailsSize'),
+      urlOutput: document.getElementById('urlOutput'),
+      copyBtn: document.getElementById('copyBtn'),
+      previewBtn: document.getElementById('previewBtn'),
+      status: document.getElementById('status'),
+      previewSection: document.getElementById('previewSection'),
+      preview: document.getElementById('preview')
+    };
+
+    // Load saved state
+    const loadState = () => {
+      const saved = localStorage.getItem('overlay-dock-state');
+      if (saved) {
+        const state = JSON.parse(saved);
+        Object.entries(state).forEach(([key, value]) => {
+          if (els[key]) els[key].value = value;
+        });
+      }
+    };
+
+    // Save state
+    const saveState = () => {
+      const state = {};
+      Object.keys(els).forEach(key => {
+        if (els[key].value !== undefined) {
+          state[key] = els[key].value;
+        }
+      });
+      localStorage.setItem('overlay-dock-state', JSON.stringify(state));
+    };
+
+    // Generate URL
+    const generateUrl = () => {
+      const params = new URLSearchParams();
+      params.set('role', els.role.value);
+      params.set('name', els.name.value);
+      params.set('details', els.details.value);
+      params.set('duration', els.duration.value);
+      params.set('exitAfter', els.duration.value);
+      params.set('barStart', rgbToRgba(els.barStart.value));
+      params.set('barEnd', rgbToRgba(els.barEnd.value));
+      params.set('accent', els.accent.value);
+      params.set('roleSize', els.roleSize.value + 'px');
+      params.set('nameSize', els.nameSize.value + 'px');
+      params.set('detailsSize', els.detailsSize.value + 'px');
+      
+      return BASE_URL + '?' + params.toString();
+    };
+
+    // Convert hex to rgba
+    const rgbToRgba = (hex) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, 0.84)`;
+    };
+
+    // Update display
+    const update = () => {
+      const url = generateUrl();
+      els.urlOutput.textContent = url;
+      saveState();
+    };
+
+    // Copy to clipboard
+    els.copyBtn.addEventListener('click', () => {
+      const url = generateUrl();
+      navigator.clipboard.writeText(url).then(() => {
+        els.status.textContent = '✓ URL copiée !';
+        els.status.className = 'status show success';
+        setTimeout(() => {
+          els.status.className = 'status';
+        }, 3000);
+      });
+    });
+
+    // Preview toggle
+    els.previewBtn.addEventListener('click', () => {
+      if (els.previewSection.style.display === 'none') {
+        const url = generateUrl();
+        els.preview.src = url;
+        els.previewSection.style.display = 'block';
+        els.previewBtn.textContent = '✖️ Fermer';
+      } else {
+        els.previewSection.style.display = 'none';
+        els.previewBtn.textContent = '👁️ Aperçu';
+      }
+    });
+
+    // Input listeners
+    Object.values(els).forEach(el => {
+      if (el.addEventListener) {
+        el.addEventListener('input', update);
+        el.addEventListener('change', update);
+      }
+    });
+
+    // Initialize
+    loadState();
+    update();
+  </script>
+</body>
+</html>

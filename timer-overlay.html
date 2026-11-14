@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Timer Overlay</title>
+  <style>
+    :root {
+      --accent: #b08d4f;
+      --bg1: #0b2a6b;
+      --bg2: #071a45;
+      --time-size: 120px;
+      --label-size: 26px;
+    }
+    html, body { width:100%; height:100%; margin:0; overflow:hidden; background:transparent;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+
+    .stage { position:absolute; inset:0; display:flex; padding:6vh 6vw; box-sizing:border-box; }
+    .stage[data-pos="center"]        { align-items:center;      justify-content:center; }
+    .stage[data-pos="top"]           { align-items:flex-start;  justify-content:center; }
+    .stage[data-pos="bottom"]        { align-items:flex-end;    justify-content:center; }
+    .stage[data-pos="top-right"]     { align-items:flex-start;  justify-content:flex-end; }
+    .stage[data-pos="bottom-right"]  { align-items:flex-end;    justify-content:flex-end; }
+    .stage[data-pos="bottom-left"]   { align-items:flex-end;    justify-content:flex-start; }
+
+    .box {
+      position:relative; display:flex; flex-direction:column; align-items:center; gap:6px;
+      padding:26px 54px 30px;
+      background:linear-gradient(160deg, var(--bg1), var(--bg2));
+      border-radius:22px;
+      box-shadow:0 22px 60px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08);
+      color:#fff;
+      opacity:0; transform:translateY(20px) scale(.97);
+      transition:opacity .5s ease, transform .5s cubic-bezier(.16,.84,.2,1);
+    }
+    .box::before { content:""; position:absolute; top:0; left:22%; right:22%; height:4px; border-radius:0 0 4px 4px;
+      background:linear-gradient(90deg, transparent, var(--accent), transparent); }
+    .stage.no-card .box { background:none; box-shadow:none; padding:6px 12px; }
+    .stage.no-card .box::before { display:none; }
+
+    .stage.is-visible .box { opacity:1; transform:translateY(0) scale(1); }
+    .stage.is-hiding .box { opacity:0; transform:translateY(14px) scale(.98); transition:opacity .4s ease, transform .4s ease; }
+
+    .label {
+      font-size:var(--label-size); letter-spacing:.22em; text-transform:uppercase;
+      color:var(--accent); font-weight:700;
+    }
+    .label:empty { display:none; }
+    .time {
+      font-size:var(--time-size); font-weight:800; line-height:1;
+      font-variant-numeric:tabular-nums; letter-spacing:.01em;
+      text-shadow:0 4px 18px rgba(0,0,0,.45);
+    }
+    .stage.is-zero .time { color:var(--accent); }
+    .stage.is-zero.blink .time { animation:blink 1s steps(1,end) infinite; }
+    @keyframes blink { 50% { opacity:.25; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .box { transition:none !important; }
+      .stage.is-zero.blink .time { animation:none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage" data-pos="center">
+    <div class="box" id="box">
+      <div class="label" id="label"></div>
+      <div class="time" id="time">00:00</div>
+    </div>
+  </div>
+
+  <script>
+    // URL STATIQUE : dans OBS -> file:///…/timer-overlay.html
+    // Le dock écrit l'état ; l'overlay lit (BroadcastChannel + storage + polling) ET
+    // "tique" localement en calculant le temps depuis un horodatage absolu (Date.now()).
+    const CHANNEL = 'timer';
+    const STATE_KEY = 'timer-state';
+    const root = document.documentElement;
+    const stage = document.getElementById('stage');
+    const timeEl = document.getElementById('time');
+    const labelEl = document.getElementById('label');
+
+    const VARS = { accent:'--accent', bg1:'--bg1', bg2:'--bg2', timeSize:'--time-size', labelSize:'--label-size' };
+
+    let S = null;   // état courant
+
+    const applyStyle = (s) => {
+      for (const [k, v] of Object.entries(VARS)) if (s[k] != null && s[k] !== '') root.style.setProperty(v, s[k]);
+      if (s.position) stage.setAttribute('data-pos', s.position);
+      stage.classList.toggle('no-card', s.card === false);
+      stage.classList.toggle('blink', s.blinkAtZero !== false);
+      labelEl.textContent = s.label || '';
+    };
+
+    const computeMs = (s) => {
+      const now = Date.now();
+      if (s.mode === 'up') return s.running ? Math.max(0, now - s.startAt) : (s.elapsedMs || 0);
+      const ms = s.running ? (s.endAt - now) : (s.remainingMs != null ? s.remainingMs : s.durationMs || 0);
+      return Math.max(0, ms);
+    };
+    const fmt = (ms, showHours) => {
+      let t = Math.round(ms / 1000);
+      const h = Math.floor(t / 3600); t %= 3600;
+      const m = Math.floor(t / 60), sec = t % 60;
+      const p = (n) => String(n).padStart(2, '0');
+      return (showHours || h > 0) ? h + ':' + p(m) + ':' + p(sec) : p(m) + ':' + p(sec);
+    };
+
+    const tick = () => {
+      if (!S) return;
+      const ms = computeMs(S);
+      const zero = S.mode !== 'up' && ms <= 0;
+      stage.classList.toggle('is-zero', zero);
+      if (zero && S.endText) timeEl.textContent = S.endText;
+      else timeEl.textContent = fmt(ms, S.showHours);
+    };
+    setInterval(tick, 200);
+
+    function show() { stage.classList.remove('is-hiding','is-visible'); void stage.offsetWidth; stage.classList.add('is-visible'); }
+    function hide() { stage.classList.remove('is-visible'); stage.classList.add('is-hiding'); }
+
+    let lastSeq = null;
+    const applyState = (s) => {
+      if (!s) return;
+      S = s; applyStyle(s); tick();
+      if (s.seq !== lastSeq) {
+        lastSeq = s.seq;
+        if (s.action === 'show' || (s.action == null && s.visible)) show();
+        else if (s.action === 'hide') hide();
+      }
+    };
+    const readState = () => { try { return JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch (e) { return null; } };
+
+    const params = new URLSearchParams(location.search);
+    const forceShow = params.get('preview') === '1';
+    const init = readState();
+    if (init) { applyState({ ...init, action: undefined }); if (forceShow || init.visible) setTimeout(show, 40); }
+    else if (forceShow) setTimeout(show, 40);
+
+    if ('BroadcastChannel' in window) { const ch = new BroadcastChannel(CHANNEL); ch.onmessage = (e) => applyState(e.data); }
+    window.addEventListener('storage', (e) => { if (e.key === STATE_KEY) applyState(readState()); });
+    setInterval(() => applyState(readState()), 300);
+  </script>
+</body>
+</html>
